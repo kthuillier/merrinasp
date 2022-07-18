@@ -3,8 +3,17 @@
 
 #Import#########################################################################
 
-import clingo
-from clingo import ApplicationOptions, Control, Flag, Model, SolveResult, StatisticsMap
+from clingo import (
+    ApplicationOptions,
+    Control,
+    Flag,
+    Function,
+    Model,
+    SolveResult,
+    StatisticsMap,
+    String,
+    clingo_main,
+)
 
 from sys import argv, exit
 from typing import Dict, List
@@ -39,7 +48,7 @@ class Application:
         group: str = 'ClingOPT Options'
         options.add(group, "lp-solver",
                     "Set LP solver\n"
-                    "      <arg>: {coin, gurobi, cplex} (default lp-solver=coin)",
+                    "   <arg>: {coin, gurobi, cplex} (default lp-solver=coin)",
                     self.parse_lp_solver_option)
 
         options.add_flag(group, "show-continous-solution",
@@ -108,23 +117,23 @@ class Application:
         if assignment is not None:
             (opt, values) = assignment
             model.extend(
-                [clingo.Function(
+                [Function(
                     '_continous_optimum',
                     [
-                        clingo.String(str(opt))
+                        String(str(opt))
                     ]
                 )])
             for name in values:
                 model.extend(
-                    [clingo.Function(
+                    [Function(
                         '_continous_solution',
                         [
-                            clingo.Function(name, []),
-                            clingo.String(str(values[name]))
+                            Function(name, []),
+                            String(str(values[name]))
                         ]
                     )])
 
-    def __on_statistics(self, step: StatisticsMap, accumulated: StatisticsMap) -> None:
+    def __on_statistics(self, step: StatisticsMap, acc: StatisticsMap) -> None:
         """_summary_
 
         :param step: _description_
@@ -142,8 +151,11 @@ class Application:
         """
         pass
 
-def clingopt_main():
-    exit(int(clingo.clingo_main(Application(), argv[1:])))
 
+def clingopt_main() -> None:
+    """_summary_
+    """
+    exit(int(clingo_main(Application(), argv[1:])))
 
-exit(int(clingo.clingo_main(Application(), argv[1:])))
+if __name__ == '__main__':
+    clingopt_main()
