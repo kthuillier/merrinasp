@@ -18,5 +18,8 @@ setup(
     tests_require=['nose'],
     include_package_data=True,
     zip_safe=False,
+    entry_points = {
+        'console_scripts': ['clingopt=clingopt.app:clingopt_main'],
+    }
 )
 
