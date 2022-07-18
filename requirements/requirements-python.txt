@@ -1,2 +1,5 @@
-setuptools
+nose
+sphinx
+sphinx-rtd-theme
 unittest2
+setuptools
