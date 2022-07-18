@@ -15,6 +15,8 @@ from clingo import (
     clingo_main,
 )
 
+from theory.language import THEORY_LANGUAGE, rewrite
+
 from sys import argv, exit
 from typing import Dict, List
 
@@ -94,6 +96,8 @@ class Application:
         if not files:
             files = ['-']
         # Parse the input file with the theory language
+        control.add('base', [], THEORY_LANGUAGE)
+        rewrite(control, files)
 
         control.ground([('base', [])])
 
@@ -156,6 +160,7 @@ def clingopt_main() -> None:
     """_summary_
     """
     exit(int(clingo_main(Application(), argv[1:])))
+
 
 if __name__ == '__main__':
     clingopt_main()

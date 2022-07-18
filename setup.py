@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_namespace_packages
 
 setup(
     name='clingopt',
@@ -7,19 +7,18 @@ setup(
     url='https://github.com/kthuillier/MERRIN_Generic',
     author='Kerian Thuillier',
     author_email='kerian.thuillier@irisa.fr',
-    license='?',
-    packages=['clingopt'],
+    license='MIT',
+    include_package_data=True,
     package_dir={'clingopt': 'src'},
+    packages=find_namespace_packages(include=['src', 'src.theory'], exclude=['src.tests']),
     install_requires=[
         'pulp',
         'clingo',
     ],
     test_suite='nose.collector',
     tests_require=['nose'],
-    include_package_data=True,
     zip_safe=False,
-    entry_points = {
+    entry_points={
         'console_scripts': ['clingopt=clingopt.app:clingopt_main'],
     }
 )
-
