@@ -15,7 +15,7 @@ from clingo import (
     clingo_main,
 )
 
-from theory.language import THEORY_LANGUAGE, rewrite
+from .theory.language import THEORY_LANGUAGE, rewrite
 
 from sys import argv, exit
 from typing import Dict, List

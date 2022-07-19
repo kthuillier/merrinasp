@@ -1,4 +1,4 @@
-from setuptools import setup, find_namespace_packages
+from setuptools import setup, find_packages
 
 setup(
     name='clingopt',
@@ -10,7 +10,7 @@ setup(
     license='MIT',
     include_package_data=True,
     package_dir={'clingopt': 'src'},
-    packages=find_namespace_packages(include=['src', 'src.theory'], exclude=['src.tests']),
+    packages=['clingopt', 'clingopt.theory'],
     install_requires=[
         'pulp',
         'clingo',
