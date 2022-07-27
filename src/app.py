@@ -16,6 +16,7 @@ from clingo import (
 )
 
 from .theory.language import THEORY_LANGUAGE, rewrite
+from .theory.propagator import OptPropagator
 
 from sys import argv, exit
 from typing import Dict, List
@@ -50,7 +51,7 @@ class Application:
         group: str = 'ClingOPT Options'
         options.add(group, "lp-solver",
                     "Set LP solver\n"
-                    "   <arg>: {coin, gurobi, cplex} (default lp-solver=coin)",
+                    "   <arg>: {cbc, gurobi, cplex} (default lp-solver=cbc)",
                     self.parse_lp_solver_option)
 
         options.add_flag(group, "show-continous-solution",
@@ -92,6 +93,8 @@ class Application:
         """
 
         # Initialize the contraint propagator
+        self.opt_propagator = OptPropagator()
+        control.register_propagator(self.opt_propagator)
 
         if not files:
             files = ['-']
@@ -117,7 +120,7 @@ class Application:
         :param model: _description_
         :type model: Model
         """
-        assignment = self.opt_propagator.assignment(model.thread_id)
+        assignment = self.opt_propagator.get_assignment(model.thread_id)
         if assignment is not None:
             (opt, values) = assignment
             model.extend(
