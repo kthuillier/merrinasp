@@ -7,13 +7,14 @@ from clingo import (
     Assignment,
     PropagateInit,
     PropagateControl,
-    TheoryAtom,
-    TheoryTerm,
+    TheoryAtom
 )
 
-from typing import Dict, List, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple, Union
 
-from.language import parse_term
+from .lp.parser import AffineExpr, CType, Constraint, Term, parse_atom
+
+from .lp.solver import SolverLp
 
 #Class#Checker##################################################################
 
@@ -30,75 +31,160 @@ class OptChecker:
         :param states: _description_
         :type states: Dict[int, bool]
         """
+        #SOLVER#INITIALISATION##################################################
+        lp_solver: str = 'cbc'
+        if 'lp_solver' in kwargs:
+            lp_solver: str = kwargs[lp_solver]
 
-        self.__sid2cid: Dict[int, List[int]] = {}
-        self.__cid2sid: Dict[int, List[int]] = {}
+        self.__lp_solver: SolverLp = SolverLp(lp_solver)
 
-        self.__cid2condid: Dict[int, List[int]] = {}
-        self.__condid2cid: Dict[int, List[int]] = {}
+        #MEMORY#INITIALISATION##################################################
+        self.__cid_data: Dict[int, Dict[str, Any]] = {}
+        self.__sid_data: Dict[int, Dict[str, Any]] = {}
+        self.__pid_data: Dict[str, Dict[str, Any]] = {}
+        self.__condid_data: Dict[int, Dict[str, Any]] = {}
 
-        self.__cidcondid2term: Dict[Tuple[int, int],
-                                    List[List[TheoryTerm]]] = {}
-
-        self.__sid2guess: Dict[int, bool] = {}
-        self.__cid2guess: Dict[int, bool] = {}
-
+        self.__cid_free: Set[int] = set()
         self.__cid_wait: Set[int] = set()
         self.__cid_added: Set[int] = set()
-        self.__cid_free: Set[int] = set()
 
+        #INITIALISE#OPTIMISATION#PROBLEM#STRUCTURE##############################
+        changes: Set[int] = set()
         for atom in init.theory_atoms:
             atom: TheoryAtom
-            cid: int = atom.literal
+
+            cid, pid, data, condids = self.__extract_atom(atom)
+
             sid: int = init.solver_literal(cid)
-            print('Atom:', atom)
-            print('\tTerm:', atom.term)
-            print('\tElements:')
-            print('\tCID:', cid)
-            print('\tSID:', sid)
-
-            self.__cid2sid[cid] = sid
-            self.__sid2cid.setdefault(sid, []).append(cid)
-
-            is_all_condid_guess = True
-            for element in atom.elements:
-                print('\t\tElement:', element)
-                print('\t\t\tCondition:', element.condition)
-                print('\t\t\tConditionID:', element.condition_id)
-                print('\t\t\tConditionSID:', init.solver_literal(element.condition_id))
-
-                condid: int = element.condition_id
-
-                self.__cid2condid.setdefault(cid, []).append(condid)
-                self.__condid2cid.setdefault(condid, []).append(cid)
-
-                condid_sid: int = init.solver_literal(condid)
-                condid_guess: bool = init.assignment.value(condid_sid)
-                if condid_guess is not None:
-                    self.__sid2guess[condid_sid] = condid_guess
-                else:
-                    is_all_condid_guess = False
-
-                self.__cidcondid2term.setdefault(
-                    (cid, condid_sid),
-                    []
-                ).append(
-                    [parse_term(term) for term in element.terms]
-                )
-
             sid_guess: bool = init.assignment.value(sid)
-            if sid_guess is not None:
-                self.__cid2guess[cid] = sid_guess
-                self.__sid2guess[sid] = sid_guess
-                if sid_guess:
-                    if is_all_condid_guess:
-                        self.__cid_added.add(cid)
-                    else:
-                        self.__cid_wait.add(cid)
-                else:
-                    self.__cid_free.add(cid)
 
-        self.is_complete: bool = len(self.__cid_free) == 0
+            self.__cid_data[cid] = {
+                'sid': sid,
+                'pid': pid,
+                'data': data,
+                'guess': sid_guess,
+                'condid': set(),
+                'term': {},
+                'complete': False,
+            }
+
+            self.__sid_data.setdefault(sid, {
+                'cid': set(),
+                'condid': set(),
+                'guess': None
+            })['cid'].add(cid)
+
+            self.__pid_data.setdefault(pid, {
+                'cid': set(),
+                'complete': False
+            })['cid'].add(cid)
+
+            self.__cid_free.add(cid)
+            if sid_guess is not None:
+                changes.add(sid)
+
+            for condid, term in condids.items():
+                condid: int
+                term: Tuple[float, Union[str, None]]
+
+                scondid: int = init.solver_literal(condid)
+                scondid_guess: bool = init.assignment.value(scondid)
+
+                if scondid_guess is not None:
+                    changes.add(scondid)
+
+                self.__cid_data[cid]['condid'].add(condid)
+                self.__cid_data[cid]['term'].setdefault(
+                    condid, []).extend(term)
+
+                self.__condid_data.setdefault(condid, {
+                    'cid': set(),
+                    'sid': scondid,
+                    'guess': None
+                })['cid'].add(cid)
+
+                self.__sid_data.setdefault(scondid, {
+                    'cid': set(),
+                    'condid': set(),
+                    'guess': None
+                })['condid'].add(condid)
+
+        #INITIALISE#WATCHED#VARIABLES###########################################
+        for sid in self.__sid_data:
+            init.add_watch(sid)
+
+    def __extract_atom(self, atom: TheoryAtom) -> Tuple[int, str, Tuple, Dict]:
+        """_summary_
+
+        :param atom: _description_
+        :type atom: TheoryAtom
+        :return: _description_
+        :rtype: Tuple[int, str, Tuple, Dict]
+        """
+        cid: int = atom.literal
+        pid, constraint = parse_atom(atom)
+        if constraint[0] == 'dom':
+            variable: str = constraint[1]
+            lower_bound: float = constraint[2]
+            upper_bound: float = constraint[3]
+            data: Tuple = ('dom', variable, (lower_bound, upper_bound))
+            condids: Dict = {}
+        elif constraint[0] == 'objective':
+            condids: Dict = constraint[1]
+            direction: int = constraint[2]
+            weight: int = constraint[3]
+            data: Tuple = ('objective', direction, weight)
+        elif constraint[0] == 'constraint':
+            condids = constraint[1]
+            op: Union[str['<='], str['>='], str['=']] = constraint[2]
+            bound: float = constraint[3]
+            data: Tuple = ('constraint', op, bound)
+        elif constraint[0] == 'assert':
+            condids = constraint[1]
+            op = constraint[2]
+            bound = constraint[3]
+            data: Tuple = ('assert', op, bound)
+        return (cid, pid, data, condids)
+
+    def __add_lpconstraint(self, cid: int) -> None:
+        """_summary_
+
+        :param cid: _description_
+        :type cid: int
+        """
+        pid: str = self.__cid_data[cid]['pid']
+        ctype: CType = self.__cid_data[cid]['data'][0]
+        if ctype in ['assert', 'constraint', 'objective']:
+            expr: AffineExpr = []
+            for condid, terms in self.__cid_data[cid]['term'].items():
+                condid: int
+                terms: List[Term]
+                guess_condid: bool = self.__condid_data[condid]['guess']
+                if (guess_condid is not None) and (guess_condid):
+                    expr.extend(terms)
+            cons: Constraint = (
+                ctype,
+                expr,
+                self.__cid_data[cid]['data'][1],
+                self.__cid_data[cid]['data'][2]
+            )
+        elif ctype == 'dom':
+            var_name = self.__cid_data[cid]['data'][1]
+            lower_bound, upper_bound = self.__cid_data[cid]['data'][2]
+            cons: Constraint = ('dom', var_name, lower_bound, upper_bound)
+        else:
+            print('Error: unknown contraint type:', ctype)
+            exit(0)
+        self.__lp_solver.append(pid, cid, cons)
+
+    def __remove_lpconstraint(self, cid: int) -> None:
+        """_summary_
+
+        :param cid: _description_
+        :type cid: int
+        """
+        pid: str = self.__cid_data[cid]['pid']
+        self.__lp_solver.remove(pid, cid)
 
     def undo(self, changes: List[int]) -> None:
         """_summary_
@@ -106,101 +192,105 @@ class OptChecker:
         :param changes: _description_
         :type changes: List[int]
         """
-        print('Internal UNDO')
+        uncomplete_cid_changes: Set[int] = set()
+        uncomplete_pid_changes: Set[str] = set()
         for sid in changes:
             sid: int
-            del self.__sid2guess[sid]
-            if sid in self.__sid2cid:
-                cids: List[int] = self.__sid2cid[sid]
-                for cid in cids:
-                    cid: int
-                    del self.__cid2guess[cid]
-                    if cid in self.__cid_wait:
-                        self.__cid_wait.remove(cid)
-                        self.__cid_free.add(cid)
-                    elif cid in self.__cid_added:
-                        self.__cid_added.remove(cid)
-                        self.__cid_free.add(cid)
-                    elif cid in self.__cid_free:
-                        print('Error: Trying to remove an un-guessed literal.')
-                        exit(0)
-                    else:
-                        self.__cid_free.add(cid)
+            self.__sid_data[sid]['guess'] = None
+            for condid in self.__sid_data[sid]['condid']:
+                condid: int
+                self.__condid_data[condid]['guess'] = None
+                uncomplete_cid_changes.update(
+                    self.__condid_data[condid]['cid'])
+            for cid in self.__sid_data[sid]['cid']:
+                cid: int
+                self.__cid_data[cid]['guess'] = None
+                uncomplete_pid_changes.add(self.__cid_data[cid]['pid'])
+                if cid in self.__cid_wait:
+                    self.__cid_wait.remove(cid)
+                elif cid in self.__cid_added:
+                    self.__cid_added.remove(cid)
+                    # TODO: update solver constraints set
+                    self.__remove_lpconstraint(cid)
+                self.__cid_free.add(cid)
 
-            if sid in self.__condid2cid:
-                cids: List[int] = self.__condid2cid[sid]
-                for cid in cids:
-                    cid: int
-                    if cid in self.__cid_added:
-                        self.__cid_added.remove(cid)
-                        if cid in self.__cid2guess:
-                            cid_guess:bool = self.__cid2guess[cid]
-                            if cid_guess:
-                                self.__cid_wait.add(cid)
+        for u_cid in uncomplete_cid_changes:
+            u_cid: str
+            if len(self.__cid_data[u_cid]) != 0:
+                self.__cid_data[u_cid]['complete'] = False
+            uncomplete_pid_changes.add(self.__cid_data[u_cid]['pid'])
+            if u_cid in self.__cid_added:
+                self.__cid_added.remove(u_cid)
+                self.__cid_wait.add(u_cid)
+                # TODO: update solver constraints set
+                self.__remove_lpconstraint(u_cid)
 
-        if self.is_complete:
-            self.is_complete = len(self.__cid_free) == 0
+        for u_pid in uncomplete_pid_changes:
+            self.__pid_data[u_pid]['complete'] = False
 
-    def propagate(self, control: PropagateControl, changes: List[int]) -> bool:
+    def propagate(self, control: PropagateControl, changes: List[int]) -> None:
         """_summary_
 
         :param control: _description_
         :type control: PropagateControl
         :param changes: _description_
         :type changes: List[int]
-        :return: _description_
-        :rtype: bool
         """
-        print('Internal PROPAGATE')
-        changed_cids: Set[int] = set()
-
+        check_cid_complete: Set[int] = set()
         for sid in changes:
             sid: int
             sid_guess: bool = control.assignment.value(sid)
-            self.__sid2guess[sid] =  sid_guess
-
-            if sid in self.__sid2cid:
-                cids: List[int] = self.__cid2sid[sid]
-                for cid in cids:
-                    cid: int
-                    self.__cid2guess[cid] = sid_guess
-                    assert(cid in self.__cid_free)
-                    self.__cid_free.remove(cid)
-                    changed_cids.add(cid)
-            
-            if sid in self.__condid2cid:
-                cids: List[int] = self.__condid2cid[sid]
-                for cid in cids:
-                    cid: int
-                    changed_cids.add(cid)
-
-        for cid in changed_cids:
-            cid: int
-            assert(cid not in self.__cid_free)
-            cid_guess = self.__cid2guess[cid]
-            if cid_guess:
-                if self.__fully_assigned_theory_atom(cid):
-                    self.__cid_added.add(cid)
-                else:
+            for condid in self.__sid_data[sid]['condid']:
+                condid: int
+                self.__condid_data[condid]['guess'] = sid_guess
+                check_cid_complete.update(self.__condid_data[condid]['cid'])
+            for cid in self.__sid_data[sid]['cid']:
+                cid: int
+                self.__cid_data[cid]['guess'] = sid_guess
+                self.__cid_free.remove(cid)
+                if sid_guess:
                     self.__cid_wait.add(cid)
+                check_cid_complete.add(cid)
 
-        return True
+        check_pid_complete: Set[str] = set()
+        for cid in check_cid_complete:
+            cid: int
+            is_guess: bool = self.__cid_data[cid]['guess']
+            is_complete: bool = self.__cid_data[cid]['complete']
+            if not is_complete:
+                is_complete = True
+                for condid in self.__cid_data[cid]['condid']:
+                    condid: int
+                    if self.__condid_data[condid]['guess'] is None:
+                        is_complete = False
+                        break
+                self.__cid_data[cid]['complete'] = is_complete
+                if is_complete:
+                    check_pid_complete.add(self.__cid_data[cid]['pid'])
 
-    def __fully_assigned_theory_atom(self, cid:int) -> bool:
-        """_summary_
+            if is_guess is None:
+                continue
+            elif is_complete and is_guess:
+                self.__cid_wait.remove(cid)
+                self.__cid_added.add(cid)
+                # TODO: update solver constraints set
+                self.__add_lpconstraint(cid)
+            elif not is_complete and is_guess:
+                assert(cid in self.__cid_wait)
+            elif is_complete and not is_guess:
+                assert(cid in self.__cid_free)
+            elif not is_complete and not is_guess:
+                assert(cid in self.__cid_free)
 
-        :param cid: _description_
-        :type cid: int
-        :return: _description_
-        :rtype: bool
-        """
-        all_condid_guess: bool = True
-        for condid in self.__cid2condid[cid]:
-            condid: int
-            if condid not in self.__sid2guess:
-                all_condid_guess = False
-                break
-        return all_condid_guess
+        for pid in check_pid_complete:
+            pid: str
+            is_complete: bool = True
+            for cid in self.__pid_data[pid]['cid']:
+                cid: int
+                is_guess: bool = self.__cid_data[cid]['guess']
+                is_complete: bool = self.__cid_data[cid]['complete']
+                if (is_guess is not None) and (is_complete):
+                    self.__pid_data[pid]['complete'] = True
 
     def get_unguess(self) -> Set[int]:
         """_summary_
@@ -208,30 +298,28 @@ class OptChecker:
         :return: _description_
         :rtype: Set[int]
         """
-        unguess_condid: Set[int] = set()
-        for cid in self.__cid_wait:
-            cid: int
-            for condid in self.__cid2condid[cid]:
-                condid: int
-                if condid not in self.__sid2guess:
-                    unguess_condid.add(condid)
-        unguess: Set[int] = unguess_condid.union(self.__cid_free)
-        return unguess
+        unguess_scondid: Set[int] = set()
+        unguess_sid: Set[int] = set()
+        for f_cid in self.__cid_free:
+            f_cid: int
+            if not self.__cid_data[f_cid]['complete']:
+                for condid in self.__cid_data[f_cid]['condid']:
+                    if self.__condid_data[condid]['guess'] is None:
+                        scondid: int = self.__condid_data[condid]['sid']
+                        unguess_scondid.add(scondid)
+            if self.__cid_data[f_cid]['guess'] is None:
+                sid: int = self.__cid_data[f_cid]['sid']
+                unguess_sid.add(sid)
+        return unguess_scondid.union(unguess_sid)
 
-    def check(self) -> bool:
+    def check(self) -> List[List[int]]:
         """_summary_
 
         :return: _description_
         :rtype: bool
         """
-        print('Internal CHECK')
-        return True
-        solve_results: Tuple[int, Dict[str, float], float] = \
-            self.__lp_solver.solve()
-        if solve_results[0] == 1:
-            self.__lp_assignment = solve_results[1]
-            return True
-        return False
+        print(self.__lp_solver)
+        return None
 
     def get_assignement(self) -> Dict[str, float]:
         """_summary_
@@ -240,7 +328,6 @@ class OptChecker:
         :rtype: Dict[str, float]
         """
         return None
-        return self.__lp_assignment
 
 #Class#Propagator###############################################################
 
@@ -301,17 +388,15 @@ class OptPropagator:
         print(f'CHECK n°{control.assignment.decision_level}:')
         optChecker: OptChecker = self.__checkers[control.thread_id]
         changes: Set[int] = optChecker.get_unguess()
-
         optChecker.propagate(control, changes)
-        sat: bool = optChecker.check()
+        nogoods: Union[List[List], None] = optChecker.check()
         optChecker.undo(changes)
 
-        if not sat:
-            nogood: List[int] = [
-                1
-            ]
-            if not control.add_nogood(nogood):
-                return
+        if nogoods is not None:
+            for nogood in nogoods:
+                nogood: List[int]
+                if not control.add_nogood(nogood):
+                    return
 
     def get_assignment(self, thread_id: int) -> Dict[str, float]:
         """_summary_

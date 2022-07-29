@@ -10,7 +10,7 @@ setup(
     license='MIT',
     include_package_data=True,
     package_dir={'clingopt': 'src'},
-    packages=['clingopt', 'clingopt.theory', 'clingopt.theory.solvers'],
+    packages=['clingopt', 'clingopt.theory', 'clingopt.theory.lp'],
     install_requires=[
         'pulp',
         'clingo',

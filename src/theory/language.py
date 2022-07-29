@@ -5,11 +5,7 @@
 
 from clingo import (
     Control,
-    String,
-    TheoryAtom,
-    TheoryElement,
-    TheoryTerm,
-    TheoryTermType,
+    String
 )
 
 from clingo.ast import (
@@ -21,7 +17,7 @@ from clingo.ast import (
     parse_files,
 )
 
-from typing import Any, Sequence
+from typing import Sequence
 
 #Theory#Language################################################################
 
@@ -116,31 +112,3 @@ class HeadBodyTransformer(Transformer):
                 False
             )
         return atom
-
-
-#Optimisation#Constraint#AST####################################################
-
-
-def parse_term(term: TheoryTerm):
-    term_type = term.type
-    if term_type is TheoryTermType.Number:
-        return ('number', term.number, None)
-    elif term_type is TheoryTermType.Symbol:
-        name: str = term.name
-        name = name.strip('"')
-        try:
-            return ('number', float(name), None)
-        except ValueError:
-            return ('symbol', name, None)
-    elif term_type is TheoryTermType.Function:
-        name: str = term.name
-        args = [
-            parse_term(arg) for arg in term.arguments
-        ]
-        if len(args) == 0:
-            return ('symbol', name, None)
-        else:
-            return ('function', name, args)
-    else:
-        print('Unknown term type:', term, term.type)
-        exit(0)
