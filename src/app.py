@@ -122,23 +122,20 @@ class Application:
         """
         assignment = self.opt_propagator.get_assignment(model.thread_id)
         if assignment is not None:
-            (opt, values) = assignment
-            model.extend(
-                [Function(
-                    '_continous_optimum',
-                    [
-                        String(str(opt))
-                    ]
-                )])
-            for name in values:
-                model.extend(
+            for pid in assignment:
+                pid: str
+                for var_name, var_value in assignment[pid].items():
+                    var_name: str
+                    var_value: float
+                    model.extend(
                     [Function(
-                        '_continous_solution',
+                        pid,
                         [
-                            Function(name, []),
-                            String(str(values[name]))
+                            Function(var_name, []),
+                            String(str(var_value))
                         ]
                     )])
+                
 
     def __on_statistics(self, step: StatisticsMap, acc: StatisticsMap) -> None:
         """_summary_

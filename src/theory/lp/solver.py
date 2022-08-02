@@ -10,7 +10,7 @@ from pulp import (
     PULP_CBC_CMD,
 )
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple, Union
 
 from .parser import Constraint
 
@@ -38,7 +38,9 @@ class SolverLp:
             print(f'LP Solver ("{lp_solver}") does not exist.')
             exit(0)
 
-        self.__problems: Dict[Any, ProblemLp] = {}
+        self.__problems: Dict[str, ProblemLp] = {}
+
+        self.__assignment: Dict[str, Dict[str, Union[float, None]]] = {}
 
     def append(self, pid: Any, cid: int, cons: Constraint) -> None:
         """_summary_
@@ -50,12 +52,16 @@ class SolverLp:
         :param cons: _description_
         :type cons: List[Tuple[int, str]]
         """
-        print('SOLVER -- add_constraint()')
-        print('\tProblem:', pid)
-        print('\tConstraint:', cid, cons)
         if pid not in self.__problems:
             self.__problems[pid] = ProblemLp(pid, self.__lp_solver)
+            self.__assignment[pid] = {}
         self.__problems[pid].append(cid, cons)
+
+    def update_stack(self) -> None:
+        """_summary_
+        """
+        for pid in self.__problems:
+            self.__problems[pid].update_stack()
 
     def remove(self, pid: Any, cid: int) -> None:
         """_summary_
@@ -65,14 +71,26 @@ class SolverLp:
         :param cid: _description_
         :type cid: int
         """
-        print('SOLVER -- remove_constraints()')
-        print('\tProblem:', pid)
-        print('\tConstraint:', cid)
         self.__problems[pid].remove(cid)
 
-    def solve(self, pid: int) -> Tuple[int, Dict[str, float], float]:
-        print('SOLVER -- solve()')
-        return (1, None, -1)
+    def solve(self, pid: str) -> Tuple[int, Dict[str, float], float, List[int]]:
+        status, assignment, optimum = self.__problems[pid].solve()
+        if status == 1 or status == -2:
+            self.__assignment[pid] = assignment
+            core_conflict: List[int] = None
+        else:
+            self.__assignment[pid] = {}
+            core_conflict: List[int] = \
+                self.__problems[pid].compute_core_conflict()
+        return (status, assignment, optimum, core_conflict)
+
+    def get_assignment(self) -> Dict[str, Dict[str, Union[float, None]]]:
+        """_summary_
+
+        :return: _description_
+        :rtype: Dict[str, Dict[str, Union[float, None]]]
+        """
+        return self.__assignment
 
     def print_problem(self, pid: str) -> str:
         """_summary_
