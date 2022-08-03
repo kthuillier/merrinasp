@@ -146,55 +146,65 @@ class OptChecker:
             data: Tuple = ('assert', op, bound)
         return (cid, pid, data, condids)
 
-    def __add_lpconstraint(self, cid: int) -> None:
+    def __add_lpconstraints(self, timestamp: int, cids: Set[int]) -> None:
         """_summary_
 
-        :param cid: _description_
-        :type cid: int
+        :param timestamp: _description_
+        :type timestamp: int
+        :param cids: _description_
+        :type cids: Set[int]
         """
-        pid: str = self.__cid_data[cid]['pid']
-        ctype: CType = self.__cid_data[cid]['data'][0]
-        if ctype in ['assert', 'constraint', 'objective']:
-            expr: AffineExpr = []
-            for condid, terms in self.__cid_data[cid]['term'].items():
-                condid: int
-                terms: List[Term]
-                guess_condid: bool = self.__condid_data[condid]['guess']
-                if (guess_condid is not None) and (guess_condid):
-                    expr.extend(terms)
-            if len(expr) == 0:
-                return
-            cons: Constraint = (
-                ctype,
-                expr,
-                self.__cid_data[cid]['data'][1],
-                self.__cid_data[cid]['data'][2]
-            )
-        elif ctype == 'dom':
-            var_name = self.__cid_data[cid]['data'][1]
-            lower_bound, upper_bound = self.__cid_data[cid]['data'][2]
-            cons: Constraint = ('dom', var_name, lower_bound, upper_bound)
-        else:
-            print('Error: unknown contraint type:', ctype)
-            exit(0)
-        self.__cid_added.add(cid)
-        self.__lp_solver.append(pid, cid, cons)
+        changes: Dict[int, List[Tuple[int, Constraint]]] = {}
+        for cid in cids:
+            self.__cid_added.add(cid)
+            pid: str = self.__cid_data[cid]['pid']
+            ctype: CType = self.__cid_data[cid]['data'][0]
+            if ctype in ['assert', 'constraint', 'objective']:
+                expr: AffineExpr = []
+                for condid, terms in self.__cid_data[cid]['term'].items():
+                    condid: int
+                    terms: List[Term]
+                    guess_condid: bool = self.__condid_data[condid]['guess']
+                    if (guess_condid is not None) and (guess_condid):
+                        expr.extend(terms)
+                if len(expr) == 0:
+                    self.__cid_added.remove(cid)
+                    continue
+                cons: Constraint = (
+                    ctype,
+                    expr,
+                    self.__cid_data[cid]['data'][1],
+                    self.__cid_data[cid]['data'][2]
+                )
+            elif ctype == 'dom':
+                var_name = self.__cid_data[cid]['data'][1]
+                lower_bound, upper_bound = self.__cid_data[cid]['data'][2]
+                cons: Constraint = ('dom', var_name, lower_bound, upper_bound)
+            else:
+                print('Error: unknown contraint type:', ctype)
+                exit(0)
+                
+            changes.setdefault(pid, []).append((cid, cons))
+        
+        self.__lp_solver.update(timestamp, changes)
 
-    def __remove_lpconstraint(self, cid: int) -> None:
+    def __remove_lpconstraints(self, timestamp: int, pids: List[str]) -> None:
         """_summary_
 
-        :param cid: _description_
-        :type cid: int
+        :param timestamp: _description_
+        :type timestamp: int
         """
-        pid: str = self.__cid_data[cid]['pid']
-        self.__lp_solver.remove(pid, cid)
+        self.__lp_solver.backtrack(timestamp, pids)
 
-    def undo(self, changes: List[int]) -> None:
+    def undo(self, timestamp: int, changes: List[int]) -> None:
         """_summary_
 
+        :param timestamp: _description_
+        :type timestamp: int
         :param changes: _description_
         :type changes: List[int]
         """
+        backtracked_pids: Set[str] = set()
         uncomplete_cid_changes: Set[int] = set()
         uncomplete_pid_changes: Set[str] = set()
         for sid in changes:
@@ -214,7 +224,8 @@ class OptChecker:
                 elif cid in self.__cid_added:
                     self.__cid_added.remove(cid)
                     # TODO: update solver constraints set
-                    self.__remove_lpconstraint(cid)
+                    pid: str = self.__cid_data[cid]['pid']
+                    backtracked_pids.add(pid)
                 self.__cid_free.add(cid)
 
         for u_cid in uncomplete_cid_changes:
@@ -225,16 +236,21 @@ class OptChecker:
             if u_cid in self.__cid_added:
                 self.__cid_added.remove(u_cid)
                 # TODO: update solver constraints set
-                self.__remove_lpconstraint(u_cid)
+                pid: str = self.__cid_data[u_cid]['pid']
+                backtracked_pids.add(pid)
             if u_cid not in self.__cid_free:
                 self.__cid_wait.add(u_cid)
+                
+        self.__remove_lpconstraints(timestamp, backtracked_pids) 
 
         for u_pid in uncomplete_pid_changes:
             self.__pid_data[u_pid]['complete'] = False
 
-    def propagate(self, control: PropagateControl, changes: List[int]) -> None:
+    def propagate(self, timestamp: int, control: PropagateControl, changes: List[int]) -> None:
         """_summary_
 
+        :param timestamp: _description_
+        :type timestamp: int
         :param control: _description_
         :type control: PropagateControl
         :param changes: _description_
@@ -244,6 +260,7 @@ class OptChecker:
         for sid in changes:
             sid: int
             sid_guess: bool = control.assignment.value(sid)
+            self.__sid_data[sid]['guess'] = sid_guess
             for condid in self.__sid_data[sid]['condid']:
                 condid: int
                 self.__condid_data[condid]['guess'] = sid_guess
@@ -256,6 +273,7 @@ class OptChecker:
                     self.__cid_wait.add(cid)
                 check_cid_complete.add(cid)
 
+        lpconstraint_to_add: Set[int] = set()
         check_pid_complete: Set[str] = set()
         for cid in check_cid_complete:
             cid: int
@@ -277,9 +295,11 @@ class OptChecker:
             elif is_complete and is_guess:
                 self.__cid_wait.remove(cid)
                 # TODO: update solver constraints set
-                self.__add_lpconstraint(cid)
+                lpconstraint_to_add.add(cid)
             elif not is_complete and is_guess:
                 assert(cid in self.__cid_wait)
+        
+        self.__add_lpconstraints(timestamp, lpconstraint_to_add)
 
         for pid in check_pid_complete:
             pid: str
@@ -290,43 +310,60 @@ class OptChecker:
                 is_complete: bool = self.__cid_data[cid]['complete']
                 if (is_guess is not None) and (is_complete):
                     self.__pid_data[pid]['complete'] = True
-                    
+
     def get_unguess(self) -> Set[int]:
         """_summary_
 
         :return: _description_
         :rtype: Set[int]
         """
-        unguess_scondid: Set[int] = set()
         unguess_sid: Set[int] = set()
-        for f_cid in self.__cid_free:
-            f_cid: int
-            if not self.__cid_data[f_cid]['complete']:
-                for condid in self.__cid_data[f_cid]['condid']:
-                    if self.__condid_data[condid]['guess'] is None:
-                        scondid: int = self.__condid_data[condid]['sid']
-                        unguess_scondid.add(scondid)
-            if self.__cid_data[f_cid]['guess'] is None:
-                sid: int = self.__cid_data[f_cid]['sid']
+        for sid in self.__sid_data:
+            if self.__sid_data[sid]['guess'] is None:
                 unguess_sid.add(sid)
-        return unguess_scondid.union(unguess_sid)
+        return unguess_sid
 
-    def generate_nogoods(self) -> List[List[int]]:
+    def __generate_core_nogoods(self, cids: List[int]) -> List[int]:
         """_summary_
 
+        :param cids: _description_
+        :type cids: List[int]
         :return: _description_
-        :rtype: List[List[int]]
+        :rtype: List[int]
         """
-        nogood: Set[int] = []
-        for sid in self.__sid_data:
-            sid_guess: Union[None, bool] = self.__sid_data[sid]['guess']
-            if sid_guess is None:
-                continue
-            elif sid_guess:
-                nogood.append(sid)
+        nogood: Set[int] = set()
+        for cid in cids:
+            cid: int
+            sid: int = self.__cid_data[cid]['sid']
+            nogood.add(sid)
+            for condid in self.__cid_data[cid]['condid']:
+                scondid: int = self.__condid_data[condid]['sid']
+                nogood.add(scondid)
+        return list(nogood)
+
+    def __generate_assert_nogoods(self, pid: int) -> List[int]:
+        """_summary_
+
+        :param pid: _description_
+        :type pid: int
+        :return: _description_
+        :rtype: List[int]
+        """
+        nogood: Set[int] = set()
+        for cid in self.__pid_data[pid]['cid']:
+            cid: int
+            sid: int = self.__cid_data[cid]['sid']
+            guess: bool = self.__cid_data[cid]['guess']
+            if guess is None or not guess:
+                nogood.add(-sid)
             else:
-                nogood.append(-sid)
-        return [list(nogood)]
+                nogood.add(sid)
+                for condid in self.__cid_data[cid]['condid']:
+                    condid_guess: bool = self.__condid_data[condid]['guess']
+                    if condid_guess is None or not condid_guess:
+                        scondid: int = self.__condid_data[condid]['sid']
+                        nogood.add(-scondid)
+        return list(nogood)
 
     def check(self) -> List[List[int]]:
         """_summary_
@@ -334,20 +371,22 @@ class OptChecker:
         :return: _description_
         :rtype: bool
         """
+        nogoods: List[List[int]] = []
         for pid in self.__pid_data:
+            for cid in self.__pid_data[pid]['cid']:
+                for condid in self.__cid_data[cid]['condid']:
+                    sid: int = self.__condid_data[condid]['sid']
             assert(self.__pid_data[pid]['complete'])
             status, _, _, core_conflict = self.__lp_solver.solve(pid)
-        nogoods: Union[None, List[List[int]]] = None
-        if status == -1:
-            nogoods = []
-            for cid in core_conflict:
-                cid: int
-                sid: int = self.__cid_data[cid]['sid']
-                nogoods.append(sid)
-                for condid in self.__cid_data[cid]['condid']:
-                    scondid:int = self.__condid_data[condid]['sid']
-                    nogoods.append(scondid)
-            nogoods = [nogoods]
+            if status != -1:
+                all_assert_valid: bool = self.__lp_solver.ensure(pid)
+                if not all_assert_valid:
+                    nogood: int = self.__generate_assert_nogoods(pid)
+                    nogoods.append(nogood)
+            else:
+                nogood: List[int] = self.__generate_core_nogoods(core_conflict)
+                nogoods.append(nogood)
+
         return nogoods
 
     def get_assignement(self) -> Dict[str, Dict[str, float]]:
@@ -394,7 +433,8 @@ class OptPropagator:
         :type changes: List[int]
         """
         # print(f'UNDO n°{assignment.decision_level}:', changes)
-        self.__checkers[thread_id].undo(changes)
+        timestamp: int = assignment.decision_level
+        self.__checkers[thread_id].undo(timestamp, changes)
 
     def propagate(self, control: PropagateControl, changes: List[int]) -> None:
         """_summary_
@@ -405,8 +445,9 @@ class OptPropagator:
         :type changes: List[int]
         """
         # print(f'PROPAGATE n°{control.assignment.decision_level}:', changes)
+        timestamp: int = control.assignment.decision_level
         optChecker: OptChecker = self.__checkers[control.thread_id]
-        optChecker.propagate(control, changes)
+        optChecker.propagate(timestamp, control, changes)
 
     def check(self, control: PropagateControl) -> None:
         """_summary_
@@ -415,11 +456,12 @@ class OptPropagator:
         :type control: PropagateControl
         """
         # print(f'CHECK n°{control.assignment.decision_level}:')
+        timestamp: int = -control.assignment.decision_level
         optChecker: OptChecker = self.__checkers[control.thread_id]
         changes: Set[int] = optChecker.get_unguess()
-        optChecker.propagate(control, changes)
+        optChecker.propagate(timestamp, control, changes)
         nogoods: Union[List[List], None] = optChecker.check()
-        optChecker.undo(changes)
+        optChecker.undo(timestamp, changes)
 
         if nogoods is not None:
             for nogood in nogoods:
