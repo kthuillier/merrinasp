@@ -54,7 +54,7 @@ class Application:
                     "   <arg>: {cbc, gurobi, cplex} (default lp-solver=cbc)",
                     self.parse_lp_solver_option)
 
-        options.add_flag(group, "show-continous-solution",
+        options.add_flag(group, "show-opt-solution",
                          "Show LP solution and value of objective function",
                          self.show_continous_solutions_flag)
 
@@ -121,21 +121,20 @@ class Application:
         :type model: Model
         """
         assignment = self.opt_propagator.get_assignment(model.thread_id)
-        return
-        for pid in assignment:
-            pid: str
-            for var_name, var_value in assignment[pid]:
-                var_name: str
-                var_value: float
-                model.extend(
-                [Function(
-                    pid,
-                    [
-                        Function(var_name, []),
-                        String(str(var_value))
-                    ]
-                )])
-                
+        if self.show_continous_solutions_flag.flag:
+            for pid in assignment:
+                pid: str
+                for var_name, var_value in assignment[pid]:
+                    var_name: str
+                    var_value: float
+                    model.extend(
+                    [Function(
+                        pid,
+                        [
+                            Function(var_name, []),
+                            String(str(var_value))
+                        ]
+                    )])
 
     def __on_statistics(self, step: StatisticsMap, acc: StatisticsMap) -> None:
         """_summary_
