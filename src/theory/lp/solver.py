@@ -65,7 +65,7 @@ class SolverLp:
             cids: List[Tuple[int, Constraint]] = changes[pid]
             self.__problems[pid].update(timestamp, cids)
 
-    def check(self, pid: List[str]) -> Union[None, List[int]]:
+    def check(self, pid: List[str]) -> List[int]:
         """_summary_
 
         :param pid: _description_
@@ -73,6 +73,8 @@ class SolverLp:
         :return: _description_
         :rtype: List[int]
         """
+        if pid not in self.__problems:
+            return []
         return self.__problems[pid].check()
 
     def solve(self, pid: str) -> Tuple[Dict[str, float], List[Tuple[str, float]]]:
