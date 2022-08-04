@@ -94,6 +94,7 @@ class ProblemLp:
         self.__cid2object: Dict[int, Constraint] = {}
 
         self.__problem: LpProblem = LpProblem(name=id, sense=LpMinimize)
+        
         self.__variables: Dict[Variable, LpVariable] = {}
 
         self.__assignment = {}
@@ -354,11 +355,6 @@ class ProblemLp:
         :param changes: _description_
         :type changes: List[Tuple[int, Constraint]]
         """
-        #print('\t\t\tUpdating, BEFORE memory:')
-        # if self.__memory_stack != []:
-        #print('\t\t\t\t', self.__memory_stack[-1].timestamp)
-        # else:
-        # print('\t\t\t\tNONE')
         if timestamp not in self.__timestamps:
             self.__timestamps[timestamp] = len(self.__memory_stack)
             memory: ProblemLp.MemoryState = ProblemLp.MemoryState(timestamp)
@@ -368,8 +364,6 @@ class ProblemLp:
         self.__memory_stack[-1].status = 0
         for cid, cons in changes:
             self.append(cid, cons)
-        #print('\t\t\tUpdating, AFTER memory:')
-        #print('\t\t\t\t', self.__memory_stack[-1].timestamp)
 
     def backtrack(self, timestamp: int) -> None:
         """_summary_
@@ -377,19 +371,12 @@ class ProblemLp:
         :param timestamp: _description_
         :type timestamp: int
         """
-        #print('\t\t\tBacktracking, BEFORE memory:')
-        #print('\t\t\t\t', self.__memory_stack[-1].timestamp)
         index: int = self.__timestamps[timestamp]
         for t in range(index, len(self.__memory_stack)):
             for cid in self.__memory_stack[t].changes:
                 self.remove(cid)
             del self.__timestamps[self.__memory_stack[t].timestamp]
         self.__memory_stack = self.__memory_stack[:index]
-        #print('\t\t\tBacktracking, AFTER memory:')
-        # if self.__memory_stack != []:
-        #print('\t\t\t\t', self.__memory_stack[-1].timestamp)
-        # else:
-        # print('\t\t\t\tNONE')
 
     def compute_core_conflict(self) -> List[int]:
         """_summary_
@@ -421,29 +408,55 @@ class ProblemLp:
 
         return core_conflict
 
-    def solve(self) -> Tuple[int, Union[Dict[str, float], None], List[Tuple[str, float]]]:
+    def check(self) -> List[int]:
         """_summary_
 
         :return: _description_
-        :rtype: Tuple[int, Union[Dict[str, float], None], float]
+        :rtype: int
         """
+        
+        if self.__memory_stack[-1].status != 0:
+            return None
+        
+        status: LpStatus = self.__problem.solve(self.solver)
+        
+        assignment: List[Tuple[str, float]] = [
+            (var.name, var.varValue) for var in self.__problem.variables()
+        ]
+        
+        self.__memory_stack[-1].status = status
+        self.__memory_stack[-1].assignment = assignment
+        if status == 1 or status == -2:
+            for i in range(2, len(self.__memory_stack) + 1):
+                if self.__memory_stack[-i].status == 1:
+                    break
+                self.__memory_stack[-i].status = 1
+                self.__memory_stack[-i].assignment = assignment
+            return None
+        
+        core_conflict: List[int] = self.compute_core_conflict()
+        
+        return core_conflict
+
+    def solve(self) -> Tuple[Dict[str, float], List[Tuple[str, float]]]:
+        """_summary_
+
+        :return: _description_
+        :rtype: Tuple[Dict[str, float], List[Tuple[str, float]]]
+        """
+        assert(self.__memory_stack[-1].status == 1)
+        if len(self.__objectives) == 0:
+            return (self.__memory_stack[-1].assignment, None)
+        
         optimums: Union[List[float], None] = []
         fixed_cid: List[Tuple[LpVariable, int, int]] = []
-
-        if self.__memory_stack[-1].status != 0:
-            status: int = self.__memory_stack[-1].status
-            assignment: Dict[str, float] = self.__memory_stack[-1].assignment
-            optimums: List[Tuple[str, float]
-                           ] = self.__memory_stack[-1].optimums
-            return (status, assignment, optimums)
-
-        self.__memory_stack[-1].status = 1
         for cid, opt_var in self.__objectives.items():
             cid: int
             opt_var: LpVariable
 
             obj_cons: LpConstraint = self.__problem.constraints[str(cid)]
             self.__problem.setObjective(opt_var)
+            self.__remove_unused_pulp_variable()
             status: LpStatus = self.__problem.solve(self.solver)
 
             self.__memory_stack[-1].status = status
@@ -461,8 +474,6 @@ class ProblemLp:
                 self.__memory_stack[-1].optimums.append(
                     (str(obj_cons), optimum))
             else:
-                assert(len(self.__memory_stack[-1].optimums) == 0)
-                optimums = None
                 break
 
         for opt_var, low, up in fixed_cid:
@@ -476,8 +487,11 @@ class ProblemLp:
                 self.__memory_stack[-1].assignment.append(
                     (str(var), var.varValue)
                 )
+                
+        self.__problem.setObjective(lpSum(1))
+        self.__remove_unused_pulp_variable()
 
-        return (self.__memory_stack[-1].status, self.__assignment, optimums)
+        return (self.__assignment, optimums)
 
     def ensure(self) -> bool:
         """_summary_

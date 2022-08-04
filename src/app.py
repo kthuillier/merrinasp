@@ -120,22 +120,21 @@ class Application:
         :param model: _description_
         :type model: Model
         """
-        return
         assignment = self.opt_propagator.get_assignment(model.thread_id)
-        if assignment is not None:
-            for pid in assignment:
-                pid: str
-                for var_name, var_value in assignment[pid].items():
-                    var_name: str
-                    var_value: float
-                    model.extend(
-                    [Function(
-                        pid,
-                        [
-                            Function(var_name, []),
-                            String(str(var_value))
-                        ]
-                    )])
+        return
+        for pid in assignment:
+            pid: str
+            for var_name, var_value in assignment[pid]:
+                var_name: str
+                var_value: float
+                model.extend(
+                [Function(
+                    pid,
+                    [
+                        Function(var_name, []),
+                        String(str(var_value))
+                    ]
+                )])
                 
 
     def __on_statistics(self, step: StatisticsMap, acc: StatisticsMap) -> None:

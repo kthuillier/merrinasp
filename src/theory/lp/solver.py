@@ -40,9 +40,7 @@ class SolverLp:
 
         self.__problems: Dict[str, ProblemLp] = {}
 
-        self.__assignment: Dict[str, Dict[str, Union[float, None]]] = {}
-
-    def backtrack(self, timestamp:int, pids: List[str]) -> None:
+    def backtrack(self, timestamp: int, pids: List[str]) -> None:
         """_summary_
 
         :param timestamp: _description_
@@ -53,7 +51,7 @@ class SolverLp:
         for pid in pids:
             self.__problems[pid].backtrack(timestamp)
 
-    def update(self, timestamp:int, changes:Dict[str, List[Tuple[int, Constraint]]]) -> None:
+    def update(self, timestamp: int, changes: Dict[str, List[Tuple[int, Constraint]]]) -> None:
         """_summary_
 
         :param timestamp: _description_
@@ -64,11 +62,20 @@ class SolverLp:
         for pid in changes:
             if pid not in self.__problems:
                 self.__problems[pid] = ProblemLp(pid, self.__lp_solver)
-                self.__assignment[pid] = {}
             cids: List[Tuple[int, Constraint]] = changes[pid]
             self.__problems[pid].update(timestamp, cids)
 
-    def solve(self, pid: str) -> Tuple[int, Dict[str, float], float, List[int]]:
+    def check(self, pid: List[str]) -> Union[None, List[int]]:
+        """_summary_
+
+        :param pid: _description_
+        :type pid: List[str]
+        :return: _description_
+        :rtype: List[int]
+        """
+        return self.__problems[pid].check()
+
+    def solve(self, pid: str) -> Tuple[Dict[str, float], List[Tuple[str, float]]]:
         """_summary_
 
         :param pid: _description_
@@ -76,16 +83,8 @@ class SolverLp:
         :return: _description_
         :rtype: Tuple[int, Dict[str, float], float, List[int]]
         """
-        status, assignment, optimum = self.__problems[pid].solve()
-        if status == 1 or status == -2:
-            self.__assignment[pid] = assignment
-            core_conflict: List[int] = None
-        else:
-            self.__assignment[pid] = {}
-            core_conflict: List[int] = \
-                self.__problems[pid].compute_core_conflict()
-        return (status, assignment, optimum, core_conflict)
-    
+        return self.__problems[pid].solve()
+
     def ensure(self, pid: str) -> bool:
         """_summary_
 
@@ -96,36 +95,3 @@ class SolverLp:
         """
         all_asserts_valid: bool = self.__problems[pid].ensure()
         return all_asserts_valid
-
-    def get_assignment(self) -> Dict[str, Dict[str, Union[float, None]]]:
-        """_summary_
-
-        :return: _description_
-        :rtype: Dict[str, Dict[str, Union[float, None]]]
-        """
-        return self.__assignment
-
-    def print_problem(self, pid: str) -> str:
-        """_summary_
-
-        :param pid: _description_
-        :type pid: str
-        :return: _description_
-        :rtype: str
-        """
-        s: str = f'Problem "{pid}":\n'
-        s += str(self.__problems[pid])
-        return s
-
-    def __str__(self) -> str:
-        """_summary_
-
-        :return: _description_
-        :rtype: str
-        """
-        s: str = ('-' * 40) + '\n'
-        for pid in self.__problems:
-            pid: str
-            s += self.print_problem(pid)
-            s += '\n' + ('-' * 20) + '\n'
-        return s

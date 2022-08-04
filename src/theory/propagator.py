@@ -10,6 +10,8 @@ from clingo import (
     TheoryAtom
 )
 
+from time import time
+
 from typing import Any, Dict, List, Set, Tuple, Union
 
 from .lp.parser import AffineExpr, CType, Constraint, Term, parse_atom
@@ -154,7 +156,7 @@ class OptChecker:
         :param cids: _description_
         :type cids: Set[int]
         """
-        changes: Dict[int, List[Tuple[int, Constraint]]] = {}
+        changes: Dict[str, List[Tuple[int, Constraint]]] = {}
         for cid in cids:
             self.__cid_added.add(cid)
             pid: str = self.__cid_data[cid]['pid']
@@ -183,9 +185,9 @@ class OptChecker:
             else:
                 print('Error: unknown contraint type:', ctype)
                 exit(0)
-                
+
             changes.setdefault(pid, []).append((cid, cons))
-        
+
         self.__lp_solver.update(timestamp, changes)
 
     def __remove_lpconstraints(self, timestamp: int, pids: List[str]) -> None:
@@ -240,8 +242,8 @@ class OptChecker:
                 backtracked_pids.add(pid)
             if u_cid not in self.__cid_free:
                 self.__cid_wait.add(u_cid)
-                
-        self.__remove_lpconstraints(timestamp, backtracked_pids) 
+
+        self.__remove_lpconstraints(timestamp, backtracked_pids)
 
         for u_pid in uncomplete_pid_changes:
             self.__pid_data[u_pid]['complete'] = False
@@ -298,8 +300,6 @@ class OptChecker:
                 lpconstraint_to_add.add(cid)
             elif not is_complete and is_guess:
                 assert(cid in self.__cid_wait)
-        
-        self.__add_lpconstraints(timestamp, lpconstraint_to_add)
 
         for pid in check_pid_complete:
             pid: str
@@ -310,6 +310,8 @@ class OptChecker:
                 is_complete: bool = self.__cid_data[cid]['complete']
                 if (is_guess is not None) and (is_complete):
                     self.__pid_data[pid]['complete'] = True
+
+        self.__add_lpconstraints(timestamp, lpconstraint_to_add)
 
     def get_unguess(self) -> Set[int]:
         """_summary_
@@ -376,8 +378,8 @@ class OptChecker:
             if not self.__pid_data[pid]['complete']:
                 continue
             assert(self.__pid_data[pid]['complete'])
-            status, _, _, core_conflict = self.__lp_solver.solve(pid)
-            if status != -1:
+            core_conflict: Union[None, List[int]] = self.__lp_solver.check(pid)
+            if core_conflict is None:
                 all_assert_valid: bool = self.__lp_solver.ensure(pid)
                 if not all_assert_valid:
                     nogood: int = self.__generate_assert_nogoods(pid)
@@ -393,7 +395,11 @@ class OptChecker:
         :return: _description_
         :rtype: Dict[str, Dict[str, float]]
         """
-        return self.__lp_solver.get_assignment()
+        assignment: Dict[str, Dict[str, float]] = {}
+        for pid in self.__pid_data:
+            pid_assignment, _ = self.__lp_solver.solve(pid)
+            assignment[pid] = pid_assignment
+        return assignment
 
 #Class#Propagator###############################################################
 
@@ -443,14 +449,22 @@ class OptPropagator:
         :type changes: List[int]
         """
         # print(f'PROPAGATE n°{control.assignment.decision_level}:', changes)
+        while len(self.__waiting_nogoods) != 0:
+            nogood: List[int] = self.__waiting_nogoods.pop()
+            if not control.add_nogood(nogood):
+                return
         timestamp: int = control.assignment.decision_level
         optChecker: OptChecker = self.__checkers[control.thread_id]
         optChecker.propagate(timestamp, control, changes)
-        for nogood in self.__waiting_nogoods:
-            nogood: List[int]
-            if not control.add_nogood(nogood):
-                return
-                    
+        # nogoods: Union[List[List], None] = optChecker.check()
+        # if nogoods is not None:
+        #     self.__waiting_nogoods.extend(nogoods)
+        # while len(self.__waiting_nogoods) != 0:
+        #     nogood: List[int] = self.__waiting_nogoods.pop()
+        #     if not control.add_nogood(nogood):
+        #         return
+
+
     def check(self, control: PropagateControl) -> None:
         """_summary_
 
@@ -467,18 +481,18 @@ class OptPropagator:
 
         if nogoods is not None:
             self.__waiting_nogoods.extend(nogoods)
-        for nogood in self.__waiting_nogoods:
-            nogood: List[int]
+        while len(self.__waiting_nogoods) != 0:
+            nogood: List[int] = self.__waiting_nogoods.pop()
             if not control.add_nogood(nogood):
                 return
 
-    def get_assignment(self, thread_id: int) -> Dict[str, float]:
+    def get_assignment(self, thread_id: int) -> List[Tuple[str, float]]:
         """_summary_
 
         :param thread_id: _description_
         :type thread_id: int
         :return: _description_
-        :rtype: Dict[str,float]
+        :rtype: List[Tuple[str, float]]
         """
         optChecker: OptChecker = self.__checkers[thread_id]
         return optChecker.get_assignement()
