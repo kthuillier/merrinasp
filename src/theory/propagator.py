@@ -373,9 +373,8 @@ class OptChecker:
         """
         nogoods: List[List[int]] = []
         for pid in self.__pid_data:
-            for cid in self.__pid_data[pid]['cid']:
-                for condid in self.__cid_data[cid]['condid']:
-                    sid: int = self.__condid_data[condid]['sid']
+            if not self.__pid_data[pid]['complete']:
+                continue
             assert(self.__pid_data[pid]['complete'])
             status, _, _, core_conflict = self.__lp_solver.solve(pid)
             if status != -1:
@@ -386,7 +385,6 @@ class OptChecker:
             else:
                 nogood: List[int] = self.__generate_core_nogoods(core_conflict)
                 nogoods.append(nogood)
-
         return nogoods
 
     def get_assignement(self) -> Dict[str, Dict[str, float]]:
@@ -408,7 +406,7 @@ class OptPropagator:
         """_summary_
         """
         self.__checkers: List[OptChecker] = []
-        pass
+        self.__waiting_nogoods: List[List[int]] = []
 
     def init(self, init: PropagateInit) -> None:
         """_summary_
@@ -448,7 +446,11 @@ class OptPropagator:
         timestamp: int = control.assignment.decision_level
         optChecker: OptChecker = self.__checkers[control.thread_id]
         optChecker.propagate(timestamp, control, changes)
-
+        for nogood in self.__waiting_nogoods:
+            nogood: List[int]
+            if not control.add_nogood(nogood):
+                return
+                    
     def check(self, control: PropagateControl) -> None:
         """_summary_
 
@@ -464,10 +466,11 @@ class OptPropagator:
         optChecker.undo(timestamp, changes)
 
         if nogoods is not None:
-            for nogood in nogoods:
-                nogood: List[int]
-                if not control.add_nogood(nogood):
-                    return
+            self.__waiting_nogoods.extend(nogoods)
+        for nogood in self.__waiting_nogoods:
+            nogood: List[int]
+            if not control.add_nogood(nogood):
+                return
 
     def get_assignment(self, thread_id: int) -> Dict[str, float]:
         """_summary_

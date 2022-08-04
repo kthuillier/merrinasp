@@ -250,7 +250,7 @@ class ProblemLp:
                 if obj_var['name'] in vars:
                     vars.remove(obj_var['name'])
         return vars
-    
+
     def __remove_unused_pulp_variable(self, restricted: List[str] = None) -> None:
         """_summary_
 
@@ -265,8 +265,9 @@ class ProblemLp:
             cons_var: List[str] = restricted
         unused_vars: List[str] = self.__get_unused_variables(cons_var)
         for unused_var in unused_vars:
-            index: int = [var.name for var in self.__problem._variables].index(
-                unused_var)
+            index: int = [
+                var.name for var in self.__problem._variables
+            ].index(unused_var)
             self.__problem._variables.pop(index)
 
         for i, var in list(self.__problem._variable_ids.items()):
@@ -282,10 +283,7 @@ class ProblemLp:
         """
         cons: LpConstraint = self.__problem.constraints[str(cid)]
         del self.__problem.constraints[str(cid)]
-        cons_var: List[LpVariable] = [
-            var_name for _, var_name in self.__cid2object[cid][1]
-        ]
-        self.__remove_unused_pulp_variable(restricted=cons_var)
+        self.__remove_unused_pulp_variable()
         return cons
 
     def remove_assert(self, cid: int) -> None:
@@ -358,9 +356,9 @@ class ProblemLp:
         """
         #print('\t\t\tUpdating, BEFORE memory:')
         # if self.__memory_stack != []:
-            #print('\t\t\t\t', self.__memory_stack[-1].timestamp)
+        #print('\t\t\t\t', self.__memory_stack[-1].timestamp)
         # else:
-            #print('\t\t\t\tNONE')
+        # print('\t\t\t\tNONE')
         if timestamp not in self.__timestamps:
             self.__timestamps[timestamp] = len(self.__memory_stack)
             memory: ProblemLp.MemoryState = ProblemLp.MemoryState(timestamp)
@@ -389,9 +387,9 @@ class ProblemLp:
         self.__memory_stack = self.__memory_stack[:index]
         #print('\t\t\tBacktracking, AFTER memory:')
         # if self.__memory_stack != []:
-            #print('\t\t\t\t', self.__memory_stack[-1].timestamp)
+        #print('\t\t\t\t', self.__memory_stack[-1].timestamp)
         # else:
-            #print('\t\t\t\tNONE')
+        # print('\t\t\t\tNONE')
 
     def compute_core_conflict(self) -> List[int]:
         """_summary_
@@ -428,10 +426,17 @@ class ProblemLp:
 
         :return: _description_
         :rtype: Tuple[int, Union[Dict[str, float], None], float]
-        """        
+        """
         optimums: Union[List[float], None] = []
         fixed_cid: List[Tuple[LpVariable, int, int]] = []
-        
+
+        if self.__memory_stack[-1].status != 0:
+            status: int = self.__memory_stack[-1].status
+            assignment: Dict[str, float] = self.__memory_stack[-1].assignment
+            optimums: List[Tuple[str, float]
+                           ] = self.__memory_stack[-1].optimums
+            return (status, assignment, optimums)
+
         self.__memory_stack[-1].status = 1
         for cid, opt_var in self.__objectives.items():
             cid: int
@@ -468,6 +473,9 @@ class ProblemLp:
         for var in self.__problem.variables():
             if str(var) not in obj_var:
                 self.__assignment[str(var)] = var.varValue
+                self.__memory_stack[-1].assignment.append(
+                    (str(var), var.varValue)
+                )
 
         return (self.__memory_stack[-1].status, self.__assignment, optimums)
 

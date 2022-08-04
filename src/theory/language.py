@@ -44,12 +44,12 @@ THEORY_LANGUAGE = """
 
     &dom/1 : domain_term, {=}, continuous_term, head;
 
-    &sum/1 : continuous_term, {=, <=, >=}, constant, head;
+    &sum/1 : continuous_term, {=, <=, >=}, continuous_term, head;
 
     &minimize/1 : continuous_term, head;
     &maximize/1 : continuous_term, head;
 
-    &assert/1 : continuous_term, {=, <=, >=, <, >}, constant, head
+    &assert/1 : continuous_term, {=, <=, >=, <, >}, continuous_term, head
 }.
 """
 

@@ -120,6 +120,7 @@ class Application:
         :param model: _description_
         :type model: Model
         """
+        return
         assignment = self.opt_propagator.get_assignment(model.thread_id)
         if assignment is not None:
             for pid in assignment:
