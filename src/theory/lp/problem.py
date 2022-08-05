@@ -94,10 +94,9 @@ class ProblemLp:
         self.__cid2object: Dict[int, Constraint] = {}
 
         self.__problem: LpProblem = LpProblem(name=id, sense=LpMinimize)
-        
+
         self.__variables: Dict[Variable, LpVariable] = {}
 
-        self.__assignment = {}
         self.__asserts: Dict[int, Tuple[LpAffineExpression, str, float]] = {}
         self.__objectives: Dict[int, LpVariable] = {}
 
@@ -414,16 +413,16 @@ class ProblemLp:
         :return: _description_
         :rtype: int
         """
-        
+
         if self.__memory_stack[-1].status != 0:
             return None
-        
+
         status: LpStatus = self.__problem.solve(self.solver)
-        
+
         assignment: List[Tuple[str, float]] = [
             (var.name, var.varValue) for var in self.__problem.variables()
         ]
-        
+
         self.__memory_stack[-1].status = status
         self.__memory_stack[-1].assignment = assignment
         if status == 1 or status == -2:
@@ -433,9 +432,8 @@ class ProblemLp:
                 self.__memory_stack[-i].status = 1
                 self.__memory_stack[-i].assignment = assignment
             return None
-        
+
         core_conflict: List[int] = self.compute_core_conflict()
-        
         return core_conflict
 
     def solve(self) -> Tuple[Dict[str, float], List[Tuple[str, float]]]:
@@ -447,7 +445,7 @@ class ProblemLp:
         assert(self.__memory_stack[-1].status == 1)
         if len(self.__objectives) == 0:
             return (self.__memory_stack[-1].assignment, None)
-        
+
         optimums: Union[List[float], None] = []
         fixed_cid: List[Tuple[LpVariable, int, int]] = []
         for cid, opt_var in self.__objectives.items():
@@ -480,18 +478,18 @@ class ProblemLp:
             opt_var.lowBound = low
             opt_var.upBound = up
 
+        self.__memory_stack[-1].assignment.clear()
         obj_var: List[str] = [var.name for var in self.__objectives.values()]
         for var in self.__problem.variables():
             if str(var) not in obj_var:
-                self.__assignment[str(var)] = var.varValue
                 self.__memory_stack[-1].assignment.append(
                     (str(var), var.varValue)
                 )
-                
+
         self.__problem.setObjective(lpSum(1))
         self.__remove_unused_pulp_variable()
 
-        return (self.__assignment, optimums)
+        return (self.__memory_stack[-1].assignment, optimums)
 
     def ensure(self) -> bool:
         """_summary_

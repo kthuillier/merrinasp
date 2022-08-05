@@ -389,13 +389,13 @@ class OptChecker:
                 nogoods.append(nogood)
         return nogoods
 
-    def get_assignement(self) -> Dict[str, Dict[str, float]]:
+    def get_assignement(self) -> Dict[str, List[Tuple[str, float]]]:
         """_summary_
 
         :return: _description_
         :rtype: Dict[str, Dict[str, float]]
         """
-        assignment: Dict[str, Dict[str, float]] = {}
+        assignment: Dict[str, List[Tuple[str, float]]] = {}
         for pid in self.__pid_data:
             pid_assignment, _ = self.__lp_solver.solve(pid)
             assignment[pid] = pid_assignment
@@ -451,7 +451,7 @@ class OptPropagator:
         # print(f'PROPAGATE n°{control.assignment.decision_level}:', changes)
         while len(self.__waiting_nogoods) != 0:
             nogood: List[int] = self.__waiting_nogoods.pop()
-            if not control.add_nogood(nogood):
+            if not control.add_nogood(nogood, lock=True):
                 return
         timestamp: int = control.assignment.decision_level
         optChecker: OptChecker = self.__checkers[control.thread_id]
@@ -478,12 +478,11 @@ class OptPropagator:
         optChecker.propagate(timestamp, control, changes)
         nogoods: Union[List[List], None] = optChecker.check()
         optChecker.undo(timestamp, changes)
-
         if nogoods is not None:
             self.__waiting_nogoods.extend(nogoods)
         while len(self.__waiting_nogoods) != 0:
             nogood: List[int] = self.__waiting_nogoods.pop()
-            if not control.add_nogood(nogood):
+            if not control.add_nogood(nogood, lock=True):
                 return
 
     def get_assignment(self, thread_id: int) -> List[Tuple[str, float]]:
