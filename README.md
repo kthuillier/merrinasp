@@ -31,13 +31,13 @@ To be used, a solver must be installed by user. Note that CBC will be installed 
 
 Linear constraints can be expressed in the ASP model as follows:
 
-| LP constraints                                                 | ClingoLP Syntax                                                                    |
+| LP constraints                                                 | Clingopt Syntax                                                                    |
 | :------------------------------------------------------------- | :--------------------------------------------------------------------------------- |
 | $w_1 \times x_1 + \cdots + w_n \times x_n \geq k$              | `&sum{`w<sub>1</sub>`*`x<sub>1</sub>`;`...`;`w<sub>n</sub>`*`x<sub>n</sub>`} >=` k |
 | $domain(x)=\{l, \cdots, u\}$                                   | `&dom{`l`..`u`} =` x                                                               |
 | $\displaystyle\min_x w_1 \times x_1 + \cdots + w_n \times x_n$ | `&minimize{`w<sub>1</sub>`*`x<sub>1</sub>`;`...`;`w<sub>n</sub>`*`x<sub>1</sub>`}` |
 | $\displaystyle\max_x w_1 \times x_1 + \cdots + w_n \times x_n$ | `&maximize{`w<sub>1</sub>`*`x<sub>1</sub>`;`...`;`w<sub>n</sub>`*`x<sub>1</sub>`}` |
-| $\forall x,\, w_1 \times x_1 + \cdots + w_n \times x_n \geq k$ | `&assert{`w<sub>1</sub>`*`x<sub>1</sub>`;`...`;`w<sub>n</sub>`*`x<sub>1</sub>`} >= k`   |
+| $\forall x, w_1 \times x_1 + \cdots + w_n \times x_n \geq k$ | `&assert{`w<sub>1</sub>`*`x<sub>1</sub>`;`...`;`w<sub>n</sub>`*`x<sub>1</sub>`} >= k`   |
 
 To avoid syntax clashes, you must quote `"` real numbers. Instead of `0.5` write `"0.5"`.
 
@@ -54,11 +54,6 @@ Options:
   --lp-solver=<arg>       : Set LP solver
    <arg>: {cbc, gurobi, cplex} (default lp-solver=cbc)
   --[no-]show-opt-solution: Show LP solution and value of objective function
-```
-
-Example:
-```sh
-clingoLP 0 --show-opt-solution example_encoding.lp example_instance.lp
 ```
 
 For more options you can ask for help as follows:
