@@ -500,21 +500,28 @@ class ProblemLp:
         for cid in self.__memory_stack[-1].asserts[:]:
             expr, op, bound = self.__asserts[cid]
             if op == '=':
-                self.__problem.setObjective(expr)
+                self.__problem.setObjective(-expr)
                 self.__remove_unused_pulp_variable()
-                self.__problem.solve(self.solver)
-                if value(expr) == bound:
-                    self.__problem.setObjective(-expr)
+                status = self.__problem.solve(self.solver)
+                if status == -2:
+                    continue
+                elif value(expr) <= bound:
+                    self.__problem.setObjective(expr)
                     self.__remove_unused_pulp_variable()
-                    self.__problem.solve(self.solver)
-                    valid_assert: bool = value(expr) == bound
+                    status = self.__problem.solve(self.solver)
+                    if status == -2:
+                        continue
+                    else:
+                        valid_assert: bool = value(expr) >= bound
                 else:
                     valid_assert: bool = False
             elif op == '<' or op == '<=':
                 self.__problem.setObjective(-expr)
                 self.__remove_unused_pulp_variable()
                 status = self.__problem.solve(self.solver)
-                if op == '<':
+                if status == -2:
+                    continue
+                elif op == '<':
                     valid_assert: bool = value(expr) < bound
                 else:
                     valid_assert: bool = value(expr) <= bound
@@ -522,8 +529,10 @@ class ProblemLp:
             elif op == '>' or op == '>=':
                 self.__problem.setObjective(expr)
                 self.__remove_unused_pulp_variable()
-                self.__problem.solve(self.solver)
-                if op == '>':
+                status = self.__problem.solve(self.solver)
+                if status == -2:
+                    continue
+                elif op == '>':
                     valid_assert: bool = value(expr) > bound
                 else:
                     valid_assert: bool = value(expr) >= bound

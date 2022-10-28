@@ -340,7 +340,11 @@ class OptChecker:
             nogood.add(sid)
             for condid in self.__cid_data[cid]['condid']:
                 scondid: int = self.__condid_data[condid]['sid']
-                nogood.add(scondid)
+                if self.__condid_data[condid]['guess']:
+                    nogood.add(scondid)
+                else:
+                    nogood.add(-scondid)
+                # nogood.add(scondid)
         return list(nogood)
 
     def __generate_assert_nogoods(self, pid: int) -> List[int]:
