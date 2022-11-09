@@ -165,7 +165,7 @@ class ProblemLp:
         lp_constraint: LpConstraint = LpConstraint(e=lp_expr, sense=sense, rhs=bound, name=str(cid)
                                                    )
         self.__problem.addConstraint(lp_constraint, name=str(cid))
-
+        
     def add_domain(self, cid: Union[int, None], dom: DomainLp) -> None:
         """_summary_
 
@@ -264,12 +264,13 @@ class ProblemLp:
         else:
             cons_var: List[str] = restricted
         unused_vars: List[str] = self.__get_unused_variables(cons_var)
+        
         for unused_var in unused_vars:
             index: int = [
                 var.name for var in self.__problem._variables
             ].index(unused_var)
             self.__problem._variables.pop(index)
-
+        
         for i, var in list(self.__problem._variable_ids.items()):
             var: LpVariable
             if var.name in unused_vars:
@@ -421,8 +422,8 @@ class ProblemLp:
 
         assignment: List[Tuple[str, float]] = [
             (var.name, var.varValue) for var in self.__problem.variables()
+            if str(var) != '__dummy'
         ]
-
         self.__memory_stack[-1].status = status
         self.__memory_stack[-1].assignment = assignment
         if status == 1 or status == -2:
@@ -432,7 +433,7 @@ class ProblemLp:
                 self.__memory_stack[-i].status = 1
                 self.__memory_stack[-i].assignment = assignment
             return None
-
+        
         core_conflict: List[int] = self.compute_core_conflict()
         return core_conflict
 
@@ -446,6 +447,7 @@ class ProblemLp:
         if len(self.__objectives) == 0:
             return (self.__memory_stack[-1].assignment, None)
 
+
         optimums: Union[List[float], None] = []
         fixed_cid: List[Tuple[LpVariable, int, int]] = []
         for cid, opt_var in self.__objectives.items():
@@ -456,7 +458,6 @@ class ProblemLp:
             self.__problem.setObjective(opt_var)
             self.__remove_unused_pulp_variable()
             status: LpStatus = self.__problem.solve(self.solver)
-
             self.__memory_stack[-1].status = status
 
             if status == 1:
@@ -471,20 +472,22 @@ class ProblemLp:
                 optimums.append((str(obj_cons), optimum))
                 self.__memory_stack[-1].optimums.append(
                     (str(obj_cons), optimum))
+                break
             else:
                 break
 
         for opt_var, low, up in fixed_cid:
             opt_var.lowBound = low
             opt_var.upBound = up
-
-        self.__memory_stack[-1].assignment.clear()
-        obj_var: List[str] = [var.name for var in self.__objectives.values()]
-        for var in self.__problem.variables():
-            if str(var) not in obj_var:
-                self.__memory_stack[-1].assignment.append(
-                    (str(var), var.varValue)
-                )
+        
+        if self.__memory_stack[-1].status == 1:
+            self.__memory_stack[-1].assignment.clear()
+            obj_var: List[str] = [var.name for var in self.__objectives.values()]
+            for var in self.__problem.variables():
+                if str(var) not in obj_var and str(var) != '__dummy':
+                    self.__memory_stack[-1].assignment.append(
+                        (str(var), var.varValue)
+                    )
 
         self.__problem.setObjective(lpSum(1))
         self.__remove_unused_pulp_variable()
@@ -497,6 +500,9 @@ class ProblemLp:
         :return: _description_
         :rtype: bool
         """
+        if len(self.__problem.constraints) == 0:
+            return False
+        
         for cid in self.__memory_stack[-1].asserts[:]:
             expr, op, bound = self.__asserts[cid]
             if op == '=':

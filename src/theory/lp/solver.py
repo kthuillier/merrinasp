@@ -74,7 +74,7 @@ class SolverLp:
         :rtype: List[int]
         """
         if pid not in self.__problems:
-            return []
+            return None
         return self.__problems[pid].check()
 
     def solve(self, pid: str) -> Tuple[Dict[str, float], List[Tuple[str, float]]]:
@@ -95,5 +95,7 @@ class SolverLp:
         :return: _description_
         :rtype: bool
         """
+        if pid not in self.__problems:
+            return True
         all_asserts_valid: bool = self.__problems[pid].ensure()
         return all_asserts_valid

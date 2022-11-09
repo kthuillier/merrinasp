@@ -120,8 +120,8 @@ class Application:
         :param model: _description_
         :type model: Model
         """
-        assignment = self.opt_propagator.get_assignment(model.thread_id)
         if self.show_continous_solutions_flag.flag:
+            assignment = self.opt_propagator.get_assignment(model.thread_id)
             for pid in assignment:
                 pid: str
                 for var_name, var_value in assignment[pid]:
