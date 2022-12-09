@@ -13,6 +13,7 @@ from clingo import (
     StatisticsMap,
     String,
     clingo_main,
+    solving,
 )
 
 from .theory.language import THEORY_LANGUAGE, rewrite
@@ -114,27 +115,60 @@ class Application:
 
     #Auxiliary#Functions########################################################
 
+    def print_model(self, model: solving.Model, printer: Function) -> None:
+        print(' '.join(
+            f'{s}' for s in model.symbols(shown=True)
+        ))
+        if self.show_continous_solutions_flag.flag:
+            assignments = self.opt_propagator.get_assignment(model.thread_id)
+            print('LP Solutions:')
+            for pid in sorted(assignments.keys()):
+                pid: str
+                align: int = 4
+                pid_assignment, pid_optimum = assignments[pid]
+                pid_optimum_str: List[str] = [str(opt) for opt in pid_optimum]
+                if len(assignments) != 1:
+                    print(f'    PID {pid}:')
+                    align = 8
+                # Status + Optimum
+                if len(pid_optimum) != 0:
+                    print(
+                        ' ' * align + f'Optimums: {"; ".join(pid_optimum_str)}'
+                    )
+                is_unbounded: bool = float('inf') in pid_optimum or \
+                    float('-inf') in pid_optimum
+                # Variables
+                if len(pid_optimum) == 0 or not is_unbounded:
+                    variables_str: str = '; '.join(
+                        f'{var_name} = {var_value}'
+                        for var_name, var_value in pid_assignment
+                    )
+                    print(' ' * align + f'{{ {variables_str} }}')
+            # TODO statistics
+            # self.opt_propagator.get_statistics(model.thread_id)
+
     def __on_model(self, model: Model) -> None:
         """_summary_
 
         :param model: _description_
         :type model: Model
         """
-        if self.show_continous_solutions_flag.flag:
-            assignment = self.opt_propagator.get_assignment(model.thread_id)
-            for pid in assignment:
-                pid: str
-                for var_name, var_value in assignment[pid]:
-                    var_name: str
-                    var_value: float
-                    model.extend(
-                    [Function(
-                        pid,
-                        [
-                            Function(var_name, []),
-                            String(str(var_value))
-                        ]
-                    )])
+        # if self.show_continous_solutions_flag.flag:
+        #     assignment = self.opt_propagator.get_assignment(model.thread_id)
+        #     for pid in assignment:
+        #         pid: str
+        #         for var_name, var_value in assignment[pid]:
+        #             var_name: str
+        #             var_value: float
+        #             model.extend(
+        #             [Function(
+        #                 pid,
+        #                 [
+        #                     Function(var_name, []),
+        #                     String(str(var_value))
+        #                 ]
+        #             )])
+        pass
 
     def __on_statistics(self, step: StatisticsMap, acc: StatisticsMap) -> None:
         """_summary_

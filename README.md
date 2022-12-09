@@ -58,7 +58,7 @@ Options:
 
 Example:
 ```sh
-clingoLP 0 --show-opt-solution example_encoding.lp example_instance.lp
+clingopt 0 --show-opt-solution example_encoding.lp example_instance.lp
 ```
 
 For more options you can ask for help as follows:

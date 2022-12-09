@@ -437,44 +437,42 @@ class ProblemLp:
         core_conflict: List[int] = self.compute_core_conflict()
         return core_conflict
 
-    def solve(self) -> Tuple[Dict[str, float], List[Tuple[str, float]]]:
+    def solve(self) -> Tuple[List[Tuple[str, float]], List[float]]:
         """_summary_
 
         :return: _description_
-        :rtype: Tuple[Dict[str, float], List[Tuple[str, float]]]
+        :rtype: Tuple[List[Tuple[str, float]], List[float]]
         """
         assert(self.__memory_stack[-1].status == 1)
         if len(self.__objectives) == 0:
-            return (self.__memory_stack[-1].assignment, None)
-
+            return (self.__memory_stack[-1].assignment, [])
+        self.__memory_stack[-1].assignment = []
+        self.__memory_stack[-1].optimums = []
 
         optimums: Union[List[float], None] = []
         fixed_cid: List[Tuple[LpVariable, int, int]] = []
-        for cid, opt_var in self.__objectives.items():
+        for cid in sorted(self.__objectives.keys()):
             cid: int
-            opt_var: LpVariable
+            opt_var: LpVariable = self.__objectives[cid]
 
             obj_cons: LpConstraint = self.__problem.constraints[str(cid)]
             self.__problem.setObjective(opt_var)
             self.__remove_unused_pulp_variable()
             status: LpStatus = self.__problem.solve(self.solver)
-            self.__memory_stack[-1].status = status
 
             if status == 1:
                 fixed_cid.append((opt_var, opt_var.lowBound, opt_var.upBound))
                 optimum: float = self.__cid2object[cid][2] * opt_var.varValue
                 optimums.append((str(obj_cons), optimum))
-                self.__memory_stack[-1].optimums.append(
-                    (str(obj_cons), optimum))
+                self.__memory_stack[-1].optimums.append(optimum)
                 opt_var.fixValue()
             elif status == -2:
                 optimum: float = self.__cid2object[cid][2] * float('-inf')
                 optimums.append((str(obj_cons), optimum))
-                self.__memory_stack[-1].optimums.append(
-                    (str(obj_cons), optimum))
+                self.__memory_stack[-1].optimums.append(optimum)
                 break
             else:
-                break
+                assert(False)
 
         for opt_var, low, up in fixed_cid:
             opt_var.lowBound = low
@@ -482,7 +480,9 @@ class ProblemLp:
         
         if self.__memory_stack[-1].status == 1:
             self.__memory_stack[-1].assignment.clear()
-            obj_var: List[str] = [var.name for var in self.__objectives.values()]
+            obj_var: List[str] = [
+                var.name for var in self.__objectives.values()
+            ]
             for var in self.__problem.variables():
                 if str(var) not in obj_var and str(var) != '__dummy':
                     self.__memory_stack[-1].assignment.append(
@@ -492,7 +492,9 @@ class ProblemLp:
         self.__problem.setObjective(lpSum(1))
         self.__remove_unused_pulp_variable()
 
-        return (self.__memory_stack[-1].assignment, optimums)
+        assignment = self.__memory_stack[-1].assignment
+        optimums = self.__memory_stack[-1].optimums
+        return (assignment, optimums)
 
     def ensure(self) -> bool:
         """_summary_

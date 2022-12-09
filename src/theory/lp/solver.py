@@ -77,13 +77,13 @@ class SolverLp:
             return None
         return self.__problems[pid].check()
 
-    def solve(self, pid: str) -> Tuple[Dict[str, float], List[Tuple[str, float]]]:
+    def solve(self, pid: str) -> Tuple[Dict[str, float], List[float]]:
         """_summary_
 
         :param pid: _description_
         :type pid: str
         :return: _description_
-        :rtype: Tuple[int, Dict[str, float], float, List[int]]
+        :rtype: Tuple[Dict[str, float], List[float]]
         """
         return self.__problems[pid].solve()
 

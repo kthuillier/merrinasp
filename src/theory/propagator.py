@@ -393,7 +393,7 @@ class OptChecker:
                 nogoods.append(nogood)
         return nogoods
 
-    def get_assignement(self) -> Dict[str, List[Tuple[str, float]]]:
+    def get_assignement(self) -> Dict[str, Tuple[List[Tuple[str, float]], List[float]]]:
         """_summary_
 
         :return: _description_
@@ -401,8 +401,8 @@ class OptChecker:
         """
         assignment: Dict[str, List[Tuple[str, float]]] = {}
         for pid in self.__pid_data:
-            pid_assignment, _ = self.__lp_solver.solve(pid)
-            assignment[pid] = pid_assignment
+            pid_assignment, optimums = self.__lp_solver.solve(pid)
+            assignment[pid] = (pid_assignment, optimums)
         return assignment
 
 #Class#Propagator###############################################################
@@ -489,13 +489,13 @@ class OptPropagator:
             if not control.add_nogood(nogood, lock=True):
                 return
 
-    def get_assignment(self, thread_id: int) -> List[Tuple[str, float]]:
+    def get_assignment(self, thread_id: int) -> Dict[str, Tuple[List[Tuple[str, float]], List[float]]]:
         """_summary_
 
         :param thread_id: _description_
         :type thread_id: int
         :return: _description_
-        :rtype: List[Tuple[str, float]]
+        :rtype: Dict[str, Tuple[List[Tuple[str, float]], List[float]]]
         """
         optChecker: OptChecker = self.__checkers[thread_id]
         return optChecker.get_assignement()
