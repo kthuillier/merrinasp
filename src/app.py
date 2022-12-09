@@ -115,7 +115,7 @@ class Application:
 
     #Auxiliary#Functions########################################################
 
-    def print_model(self, model: solving.Model, printer: Function) -> None:
+    def print_model(self, model: solving.Model, _: Function) -> None:
         print(' '.join(
             f'{s}' for s in model.symbols(shown=True)
         ))
@@ -141,12 +141,23 @@ class Application:
                 if len(pid_optimum) == 0 or not is_unbounded:
                     variables_str: str = '; '.join(
                         f'{var_name} = {var_value}'
-                        for var_name, var_value in pid_assignment
+                        for var_name, var_value in sorted(pid_assignment)
                     )
                     print(' ' * align + f'{{ {variables_str} }}')
             # TODO statistics
-            # self.opt_propagator.get_statistics(model.thread_id)
+            statistics = self.opt_propagator.get_statistics(model.thread_id)
+            compress_statistics: Dict[str, float] = {}
+            for pid in sorted(statistics.keys()):
+                for stat, value in statistics[pid].items():
+                    if stat not in compress_statistics:
+                        compress_statistics[stat] = value
+                    else:
+                        compress_statistics[stat] += value
+            print('LP Statistics:')
+            for stat in sorted(compress_statistics.keys()):
+                print(' ' * 4 + f'{stat}: {compress_statistics[stat]}')
 
+                
     def __on_model(self, model: Model) -> None:
         """_summary_
 

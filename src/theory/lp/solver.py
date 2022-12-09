@@ -99,3 +99,13 @@ class SolverLp:
             return True
         all_asserts_valid: bool = self.__problems[pid].ensure()
         return all_asserts_valid
+
+    def get_statistics(self, pid: str) -> Dict[str, float]:
+        """_summary_
+
+        :param pid: _description_
+        :type pid: str
+        :return: _description_
+        :rtype: Dict[str, float]
+        """
+        return self.__problems[pid].get_statistics()

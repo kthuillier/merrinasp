@@ -397,13 +397,26 @@ class OptChecker:
         """_summary_
 
         :return: _description_
-        :rtype: Dict[str, Dict[str, float]]
+        :rtype: Dict[str, Tuple[List[Tuple[str, float]], List[float]]]
         """
-        assignment: Dict[str, List[Tuple[str, float]]] = {}
+        assignment: Dict[str, Tuple[List[Tuple[str, float]], List[float]]] = {}
         for pid in self.__pid_data:
             pid_assignment, optimums = self.__lp_solver.solve(pid)
             assignment[pid] = (pid_assignment, optimums)
         return assignment
+    
+    def get_statistics(self) -> Dict[str, Dict[str, float]]:
+        """_summary_
+
+        :return: _description_
+        :rtype: Dict[str, Dict[str, float]]
+        """
+        statistics: Dict[str, Dict[str, float]] = {}
+        for pid in self.__pid_data:
+            pid_statistics = self.__lp_solver.get_statistics(pid)
+            statistics[pid] = pid_statistics
+        return statistics
+        
 
 #Class#Propagator###############################################################
 
@@ -499,3 +512,14 @@ class OptPropagator:
         """
         optChecker: OptChecker = self.__checkers[thread_id]
         return optChecker.get_assignement()
+
+    def get_statistics(self, thread_id: int) -> Dict[str, Dict[str, float]]:
+        """_summary_
+
+        :param thread_id: _description_
+        :type thread_id: int
+        :return: _description_
+        :rtype: Dict[str, Dict[str, float]]
+        """
+        optChecker: OptChecker = self.__checkers[thread_id]
+        return optChecker.get_statistics()
