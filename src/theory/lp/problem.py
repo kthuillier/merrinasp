@@ -372,11 +372,13 @@ class ProblemLp:
         for cid, cons in changes:
             self.append(cid, cons)
 
-    def backtrack(self, timestamp: int) -> None:
+    def backtrack(self, timestamp: int) -> bool:
         """_summary_
 
         :param timestamp: _description_
         :type timestamp: int
+        :return: _description_
+        :rtype: bool
         """
         index: int = self.__timestamps[timestamp]
         for t in range(index, len(self.__memory_stack)):
@@ -384,6 +386,8 @@ class ProblemLp:
                 self.remove(cid)
             del self.__timestamps[self.__memory_stack[t].timestamp]
         self.__memory_stack = self.__memory_stack[:index]
+        
+        return len(self.__memory_stack) > 0
 
     def __solve(self) -> LpStatus:
         dt: float = time()
@@ -429,7 +433,7 @@ class ProblemLp:
         :return: _description_
         :rtype: int
         """
-
+        
         if self.__memory_stack[-1].status != 0:
             return None
 

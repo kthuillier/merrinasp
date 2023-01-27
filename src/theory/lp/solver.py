@@ -49,7 +49,9 @@ class SolverLp:
         :type pids: List[str]
         """
         for pid in pids:
-            self.__problems[pid].backtrack(timestamp)
+            not_empty_problem: bool = self.__problems[pid].backtrack(timestamp)
+            if not not_empty_problem:
+                del self.__problems[pid]
 
     def update(self, timestamp: int, changes: Dict[str, List[Tuple[int, Constraint]]]) -> None:
         """_summary_

@@ -262,6 +262,8 @@ class OptChecker:
         for sid in changes:
             sid: int
             sid_guess: bool = control.assignment.value(sid)
+            if sid_guess is None:
+                continue
             self.__sid_data[sid]['guess'] = sid_guess
             for condid in self.__sid_data[sid]['condid']:
                 condid: int
