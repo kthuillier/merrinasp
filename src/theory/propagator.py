@@ -404,7 +404,8 @@ class OptChecker:
         assignment: Dict[str, Tuple[List[Tuple[str, float]], List[float]]] = {}
         for pid in self.__pid_data:
             pid_assignment, optimums = self.__lp_solver.solve(pid)
-            assignment[pid] = (pid_assignment, optimums)
+            if pid_assignment is not None:
+                assignment[pid] = (pid_assignment, optimums)
         return assignment
     
     def get_statistics(self) -> Dict[str, Dict[str, float]]:

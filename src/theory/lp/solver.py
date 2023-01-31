@@ -87,7 +87,10 @@ class SolverLp:
         :return: _description_
         :rtype: Tuple[Dict[str, float], List[float]]
         """
-        return self.__problems[pid].solve()
+        if pid in self.__problems:
+            return self.__problems[pid].solve()
+        else:
+            return (None, [])
 
     def ensure(self, pid: str) -> bool:
         """_summary_
