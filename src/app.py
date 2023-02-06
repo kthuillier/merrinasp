@@ -154,9 +154,8 @@ class Application:
         pass
     
     def __on_statistics(self, step: StatisticsMap, acc: StatisticsMap) -> None:
-        if len(self.statistics) != 0:
-            statistics = self.opt_propagator.get_statistics(0)
-            acc['Propagator'] = statistics
+        statistics = self.opt_propagator.get_statistics()
+        acc['Propagator'] = statistics
 
     def __on_finish(self, state: SolveResult) -> None:
         """_summary_
