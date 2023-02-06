@@ -144,19 +144,6 @@ class Application:
                         for var_name, var_value in sorted(pid_assignment)
                     )
                     print(' ' * align + f'{{ {variables_str} }}')
-            # TODO statistics
-            statistics = self.opt_propagator.get_statistics(model.thread_id)
-            compress_statistics: Dict[str, float] = {}
-            for pid in sorted(statistics.keys()):
-                for stat, value in statistics[pid].items():
-                    if stat not in compress_statistics:
-                        compress_statistics[stat] = value
-                    else:
-                        compress_statistics[stat] += value
-            print('LP Statistics:')
-            for stat in sorted(compress_statistics.keys()):
-                print(' ' * 4 + f'{stat}: {compress_statistics[stat]}')
-
                 
     def __on_model(self, model: Model) -> None:
         """_summary_
@@ -164,32 +151,12 @@ class Application:
         :param model: _description_
         :type model: Model
         """
-        # if self.show_continous_solutions_flag.flag:
-        #     assignment = self.opt_propagator.get_assignment(model.thread_id)
-        #     for pid in assignment:
-        #         pid: str
-        #         for var_name, var_value in assignment[pid]:
-        #             var_name: str
-        #             var_value: float
-        #             model.extend(
-        #             [Function(
-        #                 pid,
-        #                 [
-        #                     Function(var_name, []),
-        #                     String(str(var_value))
-        #                 ]
-        #             )])
         pass
-
+    
     def __on_statistics(self, step: StatisticsMap, acc: StatisticsMap) -> None:
-        """_summary_
-
-        :param step: _description_
-        :type step: StatisticsMap
-        :param accumulated: _description_
-        :type accumulated: StatisticsMap
-        """
-        pass
+        if len(self.statistics) != 0:
+            statistics = self.opt_propagator.get_statistics(0)
+            acc['Propagator'] = statistics
 
     def __on_finish(self, state: SolveResult) -> None:
         """_summary_

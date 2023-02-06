@@ -408,7 +408,7 @@ class OptChecker:
                 assignment[pid] = (pid_assignment, optimums)
         return assignment
     
-    def get_statistics(self) -> Dict[str, Dict[str, float]]:
+    def get_statistics(self) -> Dict[str, Dict[str, Dict[str, float]]]:
         """_summary_
 
         :return: _description_
@@ -417,7 +417,8 @@ class OptChecker:
         statistics: Dict[str, Dict[str, float]] = {}
         for pid in self.__pid_data:
             pid_statistics = self.__lp_solver.get_statistics(pid)
-            statistics[pid] = pid_statistics
+            if pid_statistics is not None:
+                statistics[pid] = pid_statistics
         return statistics
         
 
@@ -516,7 +517,7 @@ class OptPropagator:
         optChecker: OptChecker = self.__checkers[thread_id]
         return optChecker.get_assignement()
 
-    def get_statistics(self, thread_id: int) -> Dict[str, Dict[str, float]]:
+    def get_statistics(self, thread_id: int=-1) -> Dict[str, Dict[str, float]]:
         """_summary_
 
         :param thread_id: _description_
@@ -524,5 +525,23 @@ class OptPropagator:
         :return: _description_
         :rtype: Dict[str, Dict[str, float]]
         """
-        optChecker: OptChecker = self.__checkers[thread_id]
-        return optChecker.get_statistics()
+        statistics: Dict[str,Dict[str,float]] = {
+            'Sub-problems': {},
+            'NoGoods': {'Assert': 0, 'Core Conflict': 0},
+            'LP Solver': {'Calls': 0, 'Time (s)': 0}
+        }
+        to_consider_checkers: List[OptChecker] = self.__checkers
+        if thread_id != -1:
+            to_consider_checkers = [self.__checkers[thread_id]]
+        for optChecker in to_consider_checkers:                
+            t_statistics: Dict[str,Union[Dict[str,float], float]] = optChecker.get_statistics()
+            for pid in optChecker.get_statistics():
+                pid_category: str = pid.rsplit('(')[0]
+                if pid_category not in statistics['Sub-problems']:
+                    statistics['Sub-problems'][pid_category] = 0
+                statistics['Sub-problems'][pid_category] += 1
+                statistics['NoGoods']['Assert'] += t_statistics[pid]['NoGoods']['Assert']
+                statistics['NoGoods']['Core Conflict'] += t_statistics[pid]['NoGoods']['Core Conflict']
+                statistics['LP Solver']['Calls'] += t_statistics[pid]['LP Solver']['Calls']
+                statistics['LP Solver']['Time (s)'] += t_statistics[pid]['LP Solver']['Time (s)']
+        return statistics

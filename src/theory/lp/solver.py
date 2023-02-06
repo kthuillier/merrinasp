@@ -40,6 +40,8 @@ class SolverLp:
 
         self.__problems: Dict[str, ProblemLp] = {}
 
+        self.__stats_backup: Dict[str, Dict[str, Dict[str, float]]] = {}
+
     def backtrack(self, timestamp: int, pids: List[str]) -> None:
         """_summary_
 
@@ -51,6 +53,7 @@ class SolverLp:
         for pid in pids:
             not_empty_problem: bool = self.__problems[pid].backtrack(timestamp)
             if not not_empty_problem:
+                self.__stats_backup[pid] = self.__problems[pid].get_statistics()
                 del self.__problems[pid]
 
     def update(self, timestamp: int, changes: Dict[str, List[Tuple[int, Constraint]]]) -> None:
@@ -64,6 +67,9 @@ class SolverLp:
         for pid in changes:
             if pid not in self.__problems:
                 self.__problems[pid] = ProblemLp(pid, self.__lp_solver)
+                if pid in self.__stats_backup:
+                    self.__problems[pid].set_statistics(self.__stats_backup[pid])
+                    del self.__stats_backup[pid]
             cids: List[Tuple[int, Constraint]] = changes[pid]
             self.__problems[pid].update(timestamp, cids)
 
@@ -89,8 +95,7 @@ class SolverLp:
         """
         if pid in self.__problems:
             return self.__problems[pid].solve()
-        else:
-            return (None, [])
+        return (None, [])
 
     def ensure(self, pid: str) -> bool:
         """_summary_
@@ -113,4 +118,8 @@ class SolverLp:
         :return: _description_
         :rtype: Dict[str, float]
         """
-        return self.__problems[pid].get_statistics()
+        if pid in self.__problems:
+            return self.__problems[pid].get_statistics()
+        elif pid in self.__stats_backup:
+            return self.__stats_backup[pid]
+        return None

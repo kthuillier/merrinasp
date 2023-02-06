@@ -102,9 +102,9 @@ class ProblemLp:
         self.__asserts: Dict[int, Tuple[LpAffineExpression, str, float]] = {}
         self.__objectives: Dict[int, LpVariable] = {}
 
-        self.__statistics: Dict[str, float] = {
-            'NbLpSolverCalls': 0,
-            'TimeLpSolver': 0
+        self.__statistics: Dict[str, Dict[str, float]] = {
+            'LP Solver': {'Time (s)': 0, 'Calls': 0},
+            'NoGoods': {'Core Conflict': 0, 'Assert': 0}
         }
 
     def __build_LpAffineExpr(self, expr: AffineExpr) -> LpAffineExpression:
@@ -393,8 +393,8 @@ class ProblemLp:
         dt: float = time()
         status: LpStatus = self.__problem.solve(self.solver)
         dt = time() - dt
-        self.__statistics['NbLpSolverCalls'] += 1
-        self.__statistics['TimeLpSolver'] += dt
+        self.__statistics['LP Solver']['Calls'] += 1
+        self.__statistics['LP Solver']['Time (s)'] += dt
         return status
 
     def compute_core_conflict(self) -> List[int]:
@@ -424,6 +424,8 @@ class ProblemLp:
 
         for cid, cons in constraint_cache:
             self.__problem.addConstraint(cons, name=cid)
+            
+        self.__statistics['NoGoods']['Core Conflict'] += 1
 
         return core_conflict
 
@@ -567,7 +569,11 @@ class ProblemLp:
             if valid_assert:
                 self.__memory_stack[-1].asserts.remove(cid)
 
-        return len(self.__memory_stack[-1].asserts) == 0
+        if len(self.__memory_stack[-1].asserts) != 0:
+            self.__statistics['NoGoods']['Assert'] += 1
+            return False
+        
+        return True
 
     def __str__(self) -> str:
         """_summary_
@@ -576,6 +582,10 @@ class ProblemLp:
         :rtype: str
         """
         return str(self.__problem)
+
+    def set_statistics(self, stat: Dict[str, float]) -> None:
+        """"""
+        self.__statistics = self.__statistics | stat
 
     def get_statistics(self) -> Dict[str, float]:
         """_summary_
