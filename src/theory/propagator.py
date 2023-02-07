@@ -349,7 +349,7 @@ class OptChecker:
                 # nogood.add(scondid)
         return list(nogood)
 
-    def __generate_assert_nogoods(self, pid: int) -> List[int]:
+    def __generate_assert_nogoods(self, pid: int, cid_asserts: List[int]) -> List[int]:
         """_summary_
 
         :param pid: _description_
@@ -364,13 +364,28 @@ class OptChecker:
             guess: bool = self.__cid_data[cid]['guess']
             if guess is None or not guess:
                 nogood.add(-sid)
-            else:
-                nogood.add(sid)
-                for condid in self.__cid_data[cid]['condid']:
-                    condid_guess: bool = self.__condid_data[condid]['guess']
-                    if condid_guess is None or not condid_guess:
-                        scondid: int = self.__condid_data[condid]['sid']
-                        nogood.add(-scondid)
+            #     print(pid, self.__cid_data[cid]['data'], self.__cid_data[cid]['term'])
+            # else:
+            #     if self.__cid_data[cid]['data'][0] != 'assert':
+            #         continue
+            #     nogood.add(sid)
+            #     # print(pid, self.__cid_data[cid]['data'], self.__cid_data[cid]['term'])
+            #     for condid in self.__cid_data[cid]['condid']:
+            #         condid_guess: bool = self.__condid_data[condid]['guess']
+            #         if condid_guess is None or not condid_guess:
+            #             scondid: int = self.__condid_data[condid]['sid']
+            #             nogood.add(-scondid)
+        for cid in cid_asserts:
+            sid: int = self.__cid_data[cid]['sid']
+            nogood.add(sid)
+            for condid in self.__cid_data[cid]['condid']:
+                condid_guess: bool = self.__condid_data[condid]['guess']
+                scondid: int = self.__condid_data[condid]['sid']
+                if condid_guess is None or not condid_guess:
+                    nogood.add(-scondid)
+                else:
+                    nogood.add(scondid)
+                
         return list(nogood)
 
     def check(self) -> List[List[int]]:
@@ -386,9 +401,9 @@ class OptChecker:
             assert(self.__pid_data[pid]['complete'])
             core_conflict: Union[None, List[int]] = self.__lp_solver.check(pid)
             if core_conflict is None:
-                all_assert_valid: bool = self.__lp_solver.ensure(pid)
-                if not all_assert_valid:
-                    nogood: int = self.__generate_assert_nogoods(pid)
+                not_valid_asserts_cid: List[int] = self.__lp_solver.ensure(pid)
+                if len(not_valid_asserts_cid) != 0:
+                    nogood: int = self.__generate_assert_nogoods(pid, not_valid_asserts_cid)
                     nogoods.append(nogood)
             else:
                 nogood: List[int] = self.__generate_core_nogoods(core_conflict)
@@ -412,9 +427,9 @@ class OptChecker:
         """_summary_
 
         :return: _description_
-        :rtype: Dict[str, Dict[str, float]]
+        :rtype: Dict[str, Dict[str, Dict[str, float]]]
         """
-        statistics: Dict[str, Dict[str, float]] = {}
+        statistics: Dict[str, Dict[str, Dict[str, float]]] = {}
         for pid in self.__pid_data:
             pid_statistics = self.__lp_solver.get_statistics(pid)
             if pid_statistics is not None:

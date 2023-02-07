@@ -97,26 +97,26 @@ class SolverLp:
             return self.__problems[pid].solve()
         return (None, [])
 
-    def ensure(self, pid: str) -> bool:
+    def ensure(self, pid: str) -> List[int]:
         """_summary_
 
         :param pid: _description_
         :type pid: str
         :return: _description_
-        :rtype: bool
+        :rtype: List[int]
         """
         if pid not in self.__problems:
-            return True
-        all_asserts_valid: bool = self.__problems[pid].ensure()
-        return all_asserts_valid
+            return []
+        not_valid_asserts_cid: List[int] = self.__problems[pid].ensure()
+        return not_valid_asserts_cid
 
-    def get_statistics(self, pid: str) -> Dict[str, float]:
+    def get_statistics(self, pid: str) -> Dict[str, Dict[str, float]]:
         """_summary_
 
         :param pid: _description_
         :type pid: str
         :return: _description_
-        :rtype: Dict[str, float]
+        :rtype: Dict[str, Dict[str, float]]
         """
         if pid in self.__problems:
             return self.__problems[pid].get_statistics()

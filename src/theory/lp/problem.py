@@ -517,14 +517,14 @@ class ProblemLp:
         optimums = self.__memory_stack[-1].optimums
         return (assignment, optimums)
 
-    def ensure(self) -> bool:
+    def ensure(self) -> List[int]:
         """_summary_
 
         :return: _description_
         :rtype: bool
         """
         if len(self.__problem.constraints) == 0:
-            return False
+            return []
 
         for cid in self.__memory_stack[-1].asserts[:]:
             expr, op, bound = self.__asserts[cid]
@@ -571,9 +571,9 @@ class ProblemLp:
 
         if len(self.__memory_stack[-1].asserts) != 0:
             self.__statistics['NoGoods']['Assert'] += 1
-            return False
+            return self.__memory_stack[-1].asserts.copy()
         
-        return True
+        return []
 
     def __str__(self) -> str:
         """_summary_
