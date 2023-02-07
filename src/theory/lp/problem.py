@@ -21,7 +21,7 @@ from pulp import (
 
 from time import time
 
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, Set
 
 from .parser import (
     AffineExpr,
@@ -103,9 +103,11 @@ class ProblemLp:
         self.__objectives: Dict[int, LpVariable] = {}
 
         self.__statistics: Dict[str, Dict[str, float]] = {
-            'LP Solver': {'Time (s)': 0, 'Calls': 0},
+            'LP Solver': {'Time (s)': 0, 'Calls': 0, 'Prevent calls': 0, 'Prevent cost (s)': 0},
             'NoGoods': {'Core Conflict': 0, 'Assert': 0}
         }
+        
+        self.__cache: List[Tuple[Tuple,int,Tuple]] = []
 
     def __build_LpAffineExpr(self, expr: AffineExpr) -> LpAffineExpression:
         """_summary_
@@ -389,6 +391,49 @@ class ProblemLp:
         
         return len(self.__memory_stack) > 0
 
+    def __sat_solve(self) -> LpStatus:
+        dg: float = time()
+        current_constraints: Set[str] = {str(c) for c in self.__problem.constraints.values()}
+        found = [(c,s,o) for c,s,o in self.__cache if c == current_constraints]
+        if len(found) > 0:
+            self.__statistics['LP Solver']['Prevent calls'] += 1
+            self.__statistics['LP Solver']['Prevent cost (s)'] += time() - dg
+            return found[0][1]
+        dt: float = time()
+        status: LpStatus = self.__problem.solve(self.solver)
+        dt = time() - dt
+        self.__statistics['LP Solver']['Calls'] += 1
+        self.__statistics['LP Solver']['Time (s)'] += dt
+        if len(found) == 0:
+            self.__cache.append((current_constraints, status, {}))
+        dg = time() - dg - dt
+        self.__statistics['LP Solver']['Prevent cost (s)'] += dg
+        return status
+
+    def __opt_solve(self, cid) -> Tuple[int, float]:
+        dg: float = time()
+        current_constraints: Set[str] = {str(c) for c in self.__problem.constraints.values()}
+        found = [(c,s,o) for c,s,o in self.__cache if c == current_constraints]
+        if len(found) > 0:
+            if cid in found[0][2]:
+                self.__statistics['LP Solver']['Prevent calls'] += 1
+                self.__statistics['LP Solver']['Prevent cost (s)'] += time() - dg
+                return found[0][1], found[0][2][cid]
+        dt: float = time()
+        status: LpStatus = self.__problem.solve(self.solver)
+        dt = time() - dt
+        self.__statistics['LP Solver']['Calls'] += 1
+        self.__statistics['LP Solver']['Time (s)'] += dt
+        obj_v: float = value(self.__problem.objective)
+        if len(found) == 0:
+            self.__cache.append((current_constraints, status, {cid: obj_v}))
+        else:
+            assert(cid not in found[0][2])
+            found[0][2][cid] = obj_v
+        dg = time() - dg - dt
+        self.__statistics['LP Solver']['Prevent cost (s)'] += dg
+        return status, obj_v
+
     def __solve(self) -> LpStatus:
         dt: float = time()
         status: LpStatus = self.__problem.solve(self.solver)
@@ -415,7 +460,7 @@ class ProblemLp:
             ctype: CType = self.__cid2object[cid][0]
             if ctype == 'constraint' or ctype == 'objective':
                 cons: LpConstraint = self.__remove_pulp_constraint(cid)
-                status: LpStatus = self.__solve()
+                status: LpStatus = self.__sat_solve()
                 if status != -1:
                     core_conflict.append(cid)
                     self.__problem.addConstraint(cons, name=cid)
@@ -439,7 +484,7 @@ class ProblemLp:
         if self.__memory_stack[-1].status != 0:
             return None
 
-        status: LpStatus = self.__solve()
+        status: LpStatus = self.__sat_solve()
 
         assignment: List[Tuple[str, float]] = [
             (var.name, var.varValue) for var in self.__problem.variables()
@@ -531,40 +576,40 @@ class ProblemLp:
             if op == '=':
                 self.__problem.setObjective(-expr)
                 self.__remove_unused_pulp_variable()
-                status = self.__solve()
+                status, expr_v = self.__opt_solve(-cid)
                 if status == -2:
                     continue
-                elif value(expr) <= bound:
+                elif -expr_v <= bound:
                     self.__problem.setObjective(expr)
                     self.__remove_unused_pulp_variable()
-                    status = self.__solve()
+                    status, expr_v = self.__opt_solve(cid)
                     if status == -2:
                         continue
                     else:
-                        valid_assert: bool = value(expr) >= bound
+                        valid_assert: bool = expr_v >= bound
                 else:
                     valid_assert: bool = False
             elif op == '<' or op == '<=':
                 self.__problem.setObjective(-expr)
                 self.__remove_unused_pulp_variable()
-                status = self.__solve()
+                status, expr_v = self.__opt_solve(-cid)
                 if status == -2:
                     continue
                 elif op == '<':
-                    valid_assert: bool = value(expr) < bound
+                    valid_assert: bool = -expr_v < bound
                 else:
-                    valid_assert: bool = value(expr) <= bound
+                    valid_assert: bool = -expr_v <= bound
 
             elif op == '>' or op == '>=':
                 self.__problem.setObjective(expr)
                 self.__remove_unused_pulp_variable()
-                status = self.__solve()
+                status, expr_v = self.__opt_solve(cid)
                 if status == -2:
                     continue
                 elif op == '>':
-                    valid_assert: bool = value(expr) > bound
+                    valid_assert: bool = expr_v > bound
                 else:
-                    valid_assert: bool = value(expr) >= bound
+                    valid_assert: bool = expr_v >= bound
 
             if valid_assert:
                 self.__memory_stack[-1].asserts.remove(cid)

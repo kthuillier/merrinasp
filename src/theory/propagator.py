@@ -543,7 +543,7 @@ class OptPropagator:
         statistics: Dict[str,Dict[str,float]] = {
             'Sub-problems': {},
             'NoGoods': {'Assert': 0, 'Core Conflict': 0},
-            'LP Solver': {'Calls': 0, 'Time (s)': 0}
+            'LP Solver': {'Calls': 0, 'Time (s)': 0, 'Prevent calls': 0, 'Prevent cost (s)': 0}
         }
         to_consider_checkers: List[OptChecker] = self.__checkers
         if thread_id != -1:
@@ -559,4 +559,6 @@ class OptPropagator:
                 statistics['NoGoods']['Core Conflict'] += t_statistics[pid]['NoGoods']['Core Conflict']
                 statistics['LP Solver']['Calls'] += t_statistics[pid]['LP Solver']['Calls']
                 statistics['LP Solver']['Time (s)'] += t_statistics[pid]['LP Solver']['Time (s)']
+                statistics['LP Solver']['Prevent calls'] += t_statistics[pid]['LP Solver']['Prevent calls']
+                statistics['LP Solver']['Prevent cost (s)'] += t_statistics[pid]['LP Solver']['Prevent cost (s)']
         return statistics
