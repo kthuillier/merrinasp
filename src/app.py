@@ -40,6 +40,7 @@ class Application:
         self.show_continous_solutions_flag: Flag = Flag(False)
         self.continous_assignment: Dict[str, float] = None
         self.show_traces_flag: Flag = Flag(False)
+        self.lazy_mode: Flag = Flag(False)
 
     #Clingo#Function#Overwrite##################################################
 
@@ -58,6 +59,10 @@ class Application:
         options.add_flag(group, "show-opt-solution",
                          "Show LP solution and value of objective function",
                          self.show_continous_solutions_flag)
+        
+        options.add_flag(group, "lazy-mode",
+                         "Lazy SMT resolution (increase resolution speed)",
+                         self.lazy_mode)
 
         options.add_flag(group, "trace",
                          "Enables detailed output of theory propagation",
@@ -95,6 +100,7 @@ class Application:
 
         # Initialize the contraint propagator
         self.opt_propagator = OptPropagator()
+        self.opt_propagator.set_lazy_mode(self.lazy_mode.flag)
         control.register_propagator(self.opt_propagator)
 
         if not files:

@@ -89,6 +89,9 @@ class ProblemLp:
         """
         self.id: str = id
         self.solver: LpSolver = solver(msg=False, warmStart=True)
+        
+        if self.id == 'reg(("Fig3",1))':
+            print('Initialisation')
 
         self.__timestamps: Dict[int, int] = {}
         self.__memory_stack: List[ProblemLp.MemoryState] = []
@@ -406,6 +409,8 @@ class ProblemLp:
         self.__statistics['LP Solver']['Time (s)'] += dt
         if len(found) == 0:
             self.__cache.append((current_constraints, status, {}))
+            if self.id == 'reg(("Fig3",1))':
+                print('Cache extended via SAT')
         dg = time() - dg - dt
         self.__statistics['LP Solver']['Prevent cost (s)'] += dg
         return status
@@ -413,7 +418,7 @@ class ProblemLp:
     def __opt_solve(self, cid) -> Tuple[int, float]:
         dg: float = time()
         current_constraints: Set[str] = {str(c) for c in self.__problem.constraints.values()}
-        found = [(c,s,o) for c,s,o in self.__cache if c == current_constraints]
+        found = [(c,s,o) for (c,s,o) in self.__cache if c == current_constraints]
         if len(found) > 0:
             if cid in found[0][2]:
                 self.__statistics['LP Solver']['Prevent calls'] += 1
@@ -427,9 +432,13 @@ class ProblemLp:
         obj_v: float = value(self.__problem.objective)
         if len(found) == 0:
             self.__cache.append((current_constraints, status, {cid: obj_v}))
+            if self.id == 'reg(("Fig3",1))':
+                print('Cache extended via OPT: append new element')
         else:
             assert(cid not in found[0][2])
             found[0][2][cid] = obj_v
+            if self.id == 'reg(("Fig3",1))':
+                print('Cache extended via OPT: extended already existing element')
         dg = time() - dg - dt
         self.__statistics['LP Solver']['Prevent cost (s)'] += dg
         return status, obj_v
@@ -492,6 +501,7 @@ class ProblemLp:
         ]
         self.__memory_stack[-1].status = status
         self.__memory_stack[-1].assignment = assignment
+            
         if status == 1 or status == -2:
             for i in range(2, len(self.__memory_stack) + 1):
                 if self.__memory_stack[-i].status == 1:

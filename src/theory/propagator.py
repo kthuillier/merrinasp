@@ -36,7 +36,7 @@ class OptChecker:
         #SOLVER#INITIALISATION##################################################
         lp_solver: str = 'cbc'
         if 'lp_solver' in kwargs:
-            lp_solver: str = kwargs[lp_solver]
+            lp_solver: str = kwargs['lp_solver']
 
         self.__lp_solver: SolverLp = SolverLp(lp_solver)
 
@@ -111,9 +111,17 @@ class OptChecker:
                     'guess': None
                 })['condid'].add(condid)
 
+        #LAZY#MODE#INITIALISATION###############################################
+        lazy_mode: bool = False
+        if 'lazy_mode' in kwargs:
+            lazy_mode: bool = kwargs['lazy_mode']
+            
         #INITIALISE#WATCHED#VARIABLES###########################################
         for sid in self.__sid_data:
-            init.add_watch(sid)
+            if not lazy_mode:
+                init.add_watch(sid)
+            else:
+                init.remove_watch(sid)
 
     def __extract_atom(self, atom: TheoryAtom) -> Tuple[int, str, Tuple, Dict]:
         """_summary_
@@ -447,6 +455,8 @@ class OptPropagator:
     def __init__(self):
         """_summary_
         """
+        self.__is_lazy: bool = False
+        self.__lp_solver:str = 'cbc'
         self.__checkers: List[OptChecker] = []
         self.__waiting_nogoods: List[List[int]] = []
 
@@ -458,7 +468,9 @@ class OptPropagator:
         """
         for _ in range(init.number_of_threads):
             optChecker: OptChecker = OptChecker(
-                init
+                init,
+                lazy_mode=self.__is_lazy,
+                lp_solver=self.__lp_solver
             )
             self.__checkers.append(optChecker)
 
@@ -508,12 +520,19 @@ class OptPropagator:
         :type control: PropagateControl
         """
         # print(f'CHECK n°{control.assignment.decision_level}:')
+        # Add all waiting nogoods
+        while len(self.__waiting_nogoods) != 0:
+            nogood: List[int] = self.__waiting_nogoods.pop()
+            if not control.add_nogood(nogood, lock=True):
+                return
+        # Check phases
         timestamp: int = -control.assignment.decision_level
         optChecker: OptChecker = self.__checkers[control.thread_id]
         changes: Set[int] = optChecker.get_unguess()
         optChecker.propagate(timestamp, control, changes)
         nogoods: Union[List[List], None] = optChecker.check()
         optChecker.undo(timestamp, changes)
+        # Add newly add nogoods
         if nogoods is not None:
             self.__waiting_nogoods.extend(nogoods)
         while len(self.__waiting_nogoods) != 0:
@@ -562,3 +581,6 @@ class OptPropagator:
                 statistics['LP Solver']['Prevent calls'] += t_statistics[pid]['LP Solver']['Prevent calls']
                 statistics['LP Solver']['Prevent cost (s)'] += t_statistics[pid]['LP Solver']['Prevent cost (s)']
         return statistics
+    
+    def set_lazy_mode(self, is_lazy:bool) -> None:
+        self.__is_lazy = is_lazy
