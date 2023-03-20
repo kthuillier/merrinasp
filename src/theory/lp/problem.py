@@ -89,9 +89,6 @@ class ProblemLp:
         """
         self.id: str = id
         self.solver: LpSolver = solver(msg=False, warmStart=True)
-        
-        if self.id == 'reg(("Fig3",1))':
-            print('Initialisation')
 
         self.__timestamps: Dict[int, int] = {}
         self.__memory_stack: List[ProblemLp.MemoryState] = []
@@ -409,8 +406,6 @@ class ProblemLp:
         self.__statistics['LP Solver']['Time (s)'] += dt
         if len(found) == 0:
             self.__cache.append((current_constraints, status, {}))
-            if self.id == 'reg(("Fig3",1))':
-                print('Cache extended via SAT')
         dg = time() - dg - dt
         self.__statistics['LP Solver']['Prevent cost (s)'] += dg
         return status
@@ -432,13 +427,9 @@ class ProblemLp:
         obj_v: float = value(self.__problem.objective)
         if len(found) == 0:
             self.__cache.append((current_constraints, status, {cid: obj_v}))
-            if self.id == 'reg(("Fig3",1))':
-                print('Cache extended via OPT: append new element')
         else:
             assert(cid not in found[0][2])
             found[0][2][cid] = obj_v
-            if self.id == 'reg(("Fig3",1))':
-                print('Cache extended via OPT: extended already existing element')
         dg = time() - dg - dt
         self.__statistics['LP Solver']['Prevent cost (s)'] += dg
         return status, obj_v
@@ -649,3 +640,15 @@ class ProblemLp:
         :rtype: Dict[str, float]
         """
         return self.__statistics
+
+    def set_cache(self, cache: List[Tuple[Tuple, int, Tuple]]) -> None:
+        """"""
+        self.__cache.extend(cache)
+
+    def get_cache(self) -> List[Tuple[Tuple, int, Tuple]]:
+        """_summary_
+
+        :return: _description_
+        :rtype: List[Tuple[Tuple, int, Tuple]]
+        """
+        return self.__cache

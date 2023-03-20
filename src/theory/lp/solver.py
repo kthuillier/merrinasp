@@ -18,7 +18,6 @@ from .problem import ProblemLp
 
 #Class#PuLP#Solver##############################################################
 
-
 class SolverLp:
     """_summary_
     """
@@ -41,6 +40,7 @@ class SolverLp:
         self.__problems: Dict[str, ProblemLp] = {}
 
         self.__stats_backup: Dict[str, Dict[str, Dict[str, float]]] = {}
+        self.__memory_backup: Dict[str, Tuple[Tuple,int,Tuple]] = {}
 
     def backtrack(self, timestamp: int, pids: List[str]) -> None:
         """_summary_
@@ -54,6 +54,7 @@ class SolverLp:
             not_empty_problem: bool = self.__problems[pid].backtrack(timestamp)
             if not not_empty_problem:
                 self.__stats_backup[pid] = self.__problems[pid].get_statistics()
+                self.__memory_backup[pid] = self.__problems[pid].get_cache()
                 del self.__problems[pid]
 
     def update(self, timestamp: int, changes: Dict[str, List[Tuple[int, Constraint]]]) -> None:
@@ -70,6 +71,9 @@ class SolverLp:
                 if pid in self.__stats_backup:
                     self.__problems[pid].set_statistics(self.__stats_backup[pid])
                     del self.__stats_backup[pid]
+                if pid in self.__memory_backup:
+                    self.__problems[pid].set_cache(self.__memory_backup[pid])
+                    del self.__memory_backup[pid]
             cids: List[Tuple[int, Constraint]] = changes[pid]
             self.__problems[pid].update(timestamp, cids)
 
