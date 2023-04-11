@@ -41,7 +41,7 @@ varm(A) :- inp(A,_).
 
 :- clause(N,_,L,S), clause(N,_,L,-S).
 
-1 {constant(N,(-1;1)) } 1 :- node(N), not clause(N,_,_,_).
+1 {constant(N,(-1;1))} 1 :- node(N), not clause(N,_,_,_).
 
 constant(N) :- constant(N,_).
 
@@ -162,7 +162,7 @@ update(T1,A) :- mode(T1,reg), node(A), not inp(A,_).
 % SHOW
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-maxObsToAdd(5).
+maxObsToAdd(0).
 coeff("0.05").
 epsilon("0.0001").
 

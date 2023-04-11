@@ -1994,6 +1994,5 @@ restriction((5, 184), "Tc2", "7.013328").
 obj((5, 234), "0.0").
 obj((5, 287), "0.0").
 
-dtype("Fluxomics").
 dtype("Kinetics").
 dtype("Transcriptomics").

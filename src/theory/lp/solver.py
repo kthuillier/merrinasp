@@ -18,7 +18,6 @@ from .problem import ProblemLp
 
 #Class#PuLP#Solver##############################################################
 
-
 class SolverLp:
     """_summary_
     """
@@ -40,6 +39,9 @@ class SolverLp:
 
         self.__problems: Dict[str, ProblemLp] = {}
 
+        self.__stats_backup: Dict[str, Dict[str, Dict[str, float]]] = {}
+        self.__memory_backup: Dict[str, Tuple[Tuple,int,Tuple]] = {}
+
     def backtrack(self, timestamp: int, pids: List[str]) -> None:
         """_summary_
 
@@ -49,7 +51,11 @@ class SolverLp:
         :type pids: List[str]
         """
         for pid in pids:
-            self.__problems[pid].backtrack(timestamp)
+            not_empty_problem: bool = self.__problems[pid].backtrack(timestamp)
+            if not not_empty_problem:
+                self.__stats_backup[pid] = self.__problems[pid].get_statistics()
+                self.__memory_backup[pid] = self.__problems[pid].get_cache()
+                del self.__problems[pid]
 
     def update(self, timestamp: int, changes: Dict[str, List[Tuple[int, Constraint]]]) -> None:
         """_summary_
@@ -62,6 +68,12 @@ class SolverLp:
         for pid in changes:
             if pid not in self.__problems:
                 self.__problems[pid] = ProblemLp(pid, self.__lp_solver)
+                if pid in self.__stats_backup:
+                    self.__problems[pid].set_statistics(self.__stats_backup[pid])
+                    del self.__stats_backup[pid]
+                if pid in self.__memory_backup:
+                    self.__problems[pid].set_cache(self.__memory_backup[pid])
+                    del self.__memory_backup[pid]
             cids: List[Tuple[int, Constraint]] = changes[pid]
             self.__problems[pid].update(timestamp, cids)
 
@@ -74,26 +86,44 @@ class SolverLp:
         :rtype: List[int]
         """
         if pid not in self.__problems:
-            return []
+            return None
         return self.__problems[pid].check()
 
-    def solve(self, pid: str) -> Tuple[Dict[str, float], List[Tuple[str, float]]]:
+    def solve(self, pid: str) -> Tuple[Dict[str, float], List[float]]:
         """_summary_
 
         :param pid: _description_
         :type pid: str
         :return: _description_
-        :rtype: Tuple[int, Dict[str, float], float, List[int]]
+        :rtype: Tuple[Dict[str, float], List[float]]
         """
-        return self.__problems[pid].solve()
+        if pid in self.__problems:
+            return self.__problems[pid].solve()
+        return (None, [])
 
-    def ensure(self, pid: str) -> bool:
+    def ensure(self, pid: str) -> List[int]:
         """_summary_
 
         :param pid: _description_
         :type pid: str
         :return: _description_
-        :rtype: bool
+        :rtype: List[int]
         """
-        all_asserts_valid: bool = self.__problems[pid].ensure()
-        return all_asserts_valid
+        if pid not in self.__problems:
+            return []
+        not_valid_asserts_cid: List[int] = self.__problems[pid].ensure()
+        return not_valid_asserts_cid
+
+    def get_statistics(self, pid: str) -> Dict[str, Dict[str, float]]:
+        """_summary_
+
+        :param pid: _description_
+        :type pid: str
+        :return: _description_
+        :rtype: Dict[str, Dict[str, float]]
+        """
+        if pid in self.__problems:
+            return self.__problems[pid].get_statistics()
+        elif pid in self.__stats_backup:
+            return self.__stats_backup[pid]
+        return None

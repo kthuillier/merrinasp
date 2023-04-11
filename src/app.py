@@ -13,6 +13,7 @@ from clingo import (
     StatisticsMap,
     String,
     clingo_main,
+    solving,
 )
 
 from .theory.language import THEORY_LANGUAGE, rewrite
@@ -38,7 +39,7 @@ class Application:
         self.lp_epsilon: float = 10**-3
         self.show_continous_solutions_flag: Flag = Flag(False)
         self.continous_assignment: Dict[str, float] = None
-        self.show_traces_flag: Flag = Flag(False)
+        self.lazy_mode: Flag = Flag(False)
 
     #Clingo#Function#Overwrite##################################################
 
@@ -57,10 +58,11 @@ class Application:
         options.add_flag(group, "show-opt-solution",
                          "Show LP solution and value of objective function",
                          self.show_continous_solutions_flag)
+        
+        options.add_flag(group, "lazy-mode",
+                         "Lazy SMT resolution (increase resolution speed)",
+                         self.lazy_mode)
 
-        options.add_flag(group, "trace",
-                         "Enables detailed output of theory propagation",
-                         self.show_traces_flag)
 
     def parse_lp_solver_option(self, s: str) -> bool:
         """_summary_
@@ -94,6 +96,7 @@ class Application:
 
         # Initialize the contraint propagator
         self.opt_propagator = OptPropagator()
+        self.opt_propagator.set_lazy_mode(self.lazy_mode.flag)
         control.register_propagator(self.opt_propagator)
 
         if not files:
@@ -114,37 +117,47 @@ class Application:
 
     #Auxiliary#Functions########################################################
 
+    def print_model(self, model: solving.Model, _: Function) -> None:
+        print(' '.join(
+            f'{s}' for s in model.symbols(shown=True)
+        ))
+        if self.show_continous_solutions_flag.flag:
+            assignments = self.opt_propagator.get_assignment(model.thread_id)
+            print('LP Solutions:')
+            for pid in sorted(assignments.keys()):
+                pid: str
+                align: int = 4
+                pid_assignment, pid_optimum = assignments[pid]
+                pid_optimum_str: List[str] = [str(opt) for opt in pid_optimum]
+                if len(assignments) != 1:
+                    print(f'    PID {pid}:')
+                    align = 8
+                # Status + Optimum
+                if len(pid_optimum) != 0:
+                    print(
+                        ' ' * align + f'Optimums: {"; ".join(pid_optimum_str)}'
+                    )
+                is_unbounded: bool = float('inf') in pid_optimum or \
+                    float('-inf') in pid_optimum
+                # Variables
+                if len(pid_optimum) == 0 or not is_unbounded:
+                    variables_str: str = '; '.join(
+                        f'{var_name} = {var_value}'
+                        for var_name, var_value in sorted(pid_assignment)
+                    )
+                    print(' ' * align + f'{{ {variables_str} }}')
+                
     def __on_model(self, model: Model) -> None:
         """_summary_
 
         :param model: _description_
         :type model: Model
         """
-        assignment = self.opt_propagator.get_assignment(model.thread_id)
-        if self.show_continous_solutions_flag.flag:
-            for pid in assignment:
-                pid: str
-                for var_name, var_value in assignment[pid]:
-                    var_name: str
-                    var_value: float
-                    model.extend(
-                    [Function(
-                        pid,
-                        [
-                            Function(var_name, []),
-                            String(str(var_value))
-                        ]
-                    )])
-
-    def __on_statistics(self, step: StatisticsMap, acc: StatisticsMap) -> None:
-        """_summary_
-
-        :param step: _description_
-        :type step: StatisticsMap
-        :param accumulated: _description_
-        :type accumulated: StatisticsMap
-        """
         pass
+    
+    def __on_statistics(self, step: StatisticsMap, acc: StatisticsMap) -> None:
+        statistics = self.opt_propagator.get_statistics()
+        acc['Propagator'] = statistics
 
     def __on_finish(self, state: SolveResult) -> None:
         """_summary_

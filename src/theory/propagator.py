@@ -36,7 +36,7 @@ class OptChecker:
         #SOLVER#INITIALISATION##################################################
         lp_solver: str = 'cbc'
         if 'lp_solver' in kwargs:
-            lp_solver: str = kwargs[lp_solver]
+            lp_solver: str = kwargs['lp_solver']
 
         self.__lp_solver: SolverLp = SolverLp(lp_solver)
 
@@ -111,9 +111,17 @@ class OptChecker:
                     'guess': None
                 })['condid'].add(condid)
 
+        #LAZY#MODE#INITIALISATION###############################################
+        lazy_mode: bool = False
+        if 'lazy_mode' in kwargs:
+            lazy_mode: bool = kwargs['lazy_mode']
+            
         #INITIALISE#WATCHED#VARIABLES###########################################
         for sid in self.__sid_data:
-            init.add_watch(sid)
+            if not lazy_mode:
+                init.add_watch(sid)
+            else:
+                init.remove_watch(sid)
 
     def __extract_atom(self, atom: TheoryAtom) -> Tuple[int, str, Tuple, Dict]:
         """_summary_
@@ -262,6 +270,8 @@ class OptChecker:
         for sid in changes:
             sid: int
             sid_guess: bool = control.assignment.value(sid)
+            if sid_guess is None:
+                continue
             self.__sid_data[sid]['guess'] = sid_guess
             for condid in self.__sid_data[sid]['condid']:
                 condid: int
@@ -340,10 +350,14 @@ class OptChecker:
             nogood.add(sid)
             for condid in self.__cid_data[cid]['condid']:
                 scondid: int = self.__condid_data[condid]['sid']
-                nogood.add(scondid)
+                if self.__condid_data[condid]['guess']:
+                    nogood.add(scondid)
+                else:
+                    nogood.add(-scondid)
+                # nogood.add(scondid)
         return list(nogood)
 
-    def __generate_assert_nogoods(self, pid: int) -> List[int]:
+    def __generate_assert_nogoods(self, pid: int, cid_asserts: List[int]) -> List[int]:
         """_summary_
 
         :param pid: _description_
@@ -358,13 +372,28 @@ class OptChecker:
             guess: bool = self.__cid_data[cid]['guess']
             if guess is None or not guess:
                 nogood.add(-sid)
-            else:
-                nogood.add(sid)
-                for condid in self.__cid_data[cid]['condid']:
-                    condid_guess: bool = self.__condid_data[condid]['guess']
-                    if condid_guess is None or not condid_guess:
-                        scondid: int = self.__condid_data[condid]['sid']
-                        nogood.add(-scondid)
+            #     print(pid, self.__cid_data[cid]['data'], self.__cid_data[cid]['term'])
+            # else:
+            #     if self.__cid_data[cid]['data'][0] != 'assert':
+            #         continue
+            #     nogood.add(sid)
+            #     # print(pid, self.__cid_data[cid]['data'], self.__cid_data[cid]['term'])
+            #     for condid in self.__cid_data[cid]['condid']:
+            #         condid_guess: bool = self.__condid_data[condid]['guess']
+            #         if condid_guess is None or not condid_guess:
+            #             scondid: int = self.__condid_data[condid]['sid']
+            #             nogood.add(-scondid)
+        for cid in cid_asserts:
+            sid: int = self.__cid_data[cid]['sid']
+            nogood.add(sid)
+            for condid in self.__cid_data[cid]['condid']:
+                condid_guess: bool = self.__condid_data[condid]['guess']
+                scondid: int = self.__condid_data[condid]['sid']
+                if condid_guess is None or not condid_guess:
+                    nogood.add(-scondid)
+                else:
+                    nogood.add(scondid)
+                
         return list(nogood)
 
     def check(self) -> List[List[int]]:
@@ -380,26 +409,41 @@ class OptChecker:
             assert(self.__pid_data[pid]['complete'])
             core_conflict: Union[None, List[int]] = self.__lp_solver.check(pid)
             if core_conflict is None:
-                all_assert_valid: bool = self.__lp_solver.ensure(pid)
-                if not all_assert_valid:
-                    nogood: int = self.__generate_assert_nogoods(pid)
+                not_valid_asserts_cid: List[int] = self.__lp_solver.ensure(pid)
+                if len(not_valid_asserts_cid) != 0:
+                    nogood: int = self.__generate_assert_nogoods(pid, not_valid_asserts_cid)
                     nogoods.append(nogood)
             else:
                 nogood: List[int] = self.__generate_core_nogoods(core_conflict)
                 nogoods.append(nogood)
         return nogoods
 
-    def get_assignement(self) -> Dict[str, List[Tuple[str, float]]]:
+    def get_assignement(self) -> Dict[str, Tuple[List[Tuple[str, float]], List[float]]]:
         """_summary_
 
         :return: _description_
-        :rtype: Dict[str, Dict[str, float]]
+        :rtype: Dict[str, Tuple[List[Tuple[str, float]], List[float]]]
         """
-        assignment: Dict[str, List[Tuple[str, float]]] = {}
+        assignment: Dict[str, Tuple[List[Tuple[str, float]], List[float]]] = {}
         for pid in self.__pid_data:
-            pid_assignment, _ = self.__lp_solver.solve(pid)
-            assignment[pid] = pid_assignment
+            pid_assignment, optimums = self.__lp_solver.solve(pid)
+            if pid_assignment is not None:
+                assignment[pid] = (pid_assignment, optimums)
         return assignment
+    
+    def get_statistics(self) -> Dict[str, Dict[str, Dict[str, float]]]:
+        """_summary_
+
+        :return: _description_
+        :rtype: Dict[str, Dict[str, Dict[str, float]]]
+        """
+        statistics: Dict[str, Dict[str, Dict[str, float]]] = {}
+        for pid in self.__pid_data:
+            pid_statistics = self.__lp_solver.get_statistics(pid)
+            if pid_statistics is not None:
+                statistics[pid] = pid_statistics
+        return statistics
+        
 
 #Class#Propagator###############################################################
 
@@ -411,6 +455,8 @@ class OptPropagator:
     def __init__(self):
         """_summary_
         """
+        self.__is_lazy: bool = False
+        self.__lp_solver:str = 'cbc'
         self.__checkers: List[OptChecker] = []
         self.__waiting_nogoods: List[List[int]] = []
 
@@ -422,7 +468,9 @@ class OptPropagator:
         """
         for _ in range(init.number_of_threads):
             optChecker: OptChecker = OptChecker(
-                init
+                init,
+                lazy_mode=self.__is_lazy,
+                lp_solver=self.__lp_solver
             )
             self.__checkers.append(optChecker)
 
@@ -472,12 +520,19 @@ class OptPropagator:
         :type control: PropagateControl
         """
         # print(f'CHECK n°{control.assignment.decision_level}:')
+        # Add all waiting nogoods
+        while len(self.__waiting_nogoods) != 0:
+            nogood: List[int] = self.__waiting_nogoods.pop()
+            if not control.add_nogood(nogood, lock=True):
+                return
+        # Check phases
         timestamp: int = -control.assignment.decision_level
         optChecker: OptChecker = self.__checkers[control.thread_id]
         changes: Set[int] = optChecker.get_unguess()
         optChecker.propagate(timestamp, control, changes)
         nogoods: Union[List[List], None] = optChecker.check()
         optChecker.undo(timestamp, changes)
+        # Add newly add nogoods
         if nogoods is not None:
             self.__waiting_nogoods.extend(nogoods)
         while len(self.__waiting_nogoods) != 0:
@@ -485,13 +540,47 @@ class OptPropagator:
             if not control.add_nogood(nogood, lock=True):
                 return
 
-    def get_assignment(self, thread_id: int) -> List[Tuple[str, float]]:
+    def get_assignment(self, thread_id: int) -> Dict[str, Tuple[List[Tuple[str, float]], List[float]]]:
         """_summary_
 
         :param thread_id: _description_
         :type thread_id: int
         :return: _description_
-        :rtype: List[Tuple[str, float]]
+        :rtype: Dict[str, Tuple[List[Tuple[str, float]], List[float]]]
         """
         optChecker: OptChecker = self.__checkers[thread_id]
         return optChecker.get_assignement()
+
+    def get_statistics(self, thread_id: int=-1) -> Dict[str, Dict[str, float]]:
+        """_summary_
+
+        :param thread_id: _description_
+        :type thread_id: int
+        :return: _description_
+        :rtype: Dict[str, Dict[str, float]]
+        """
+        statistics: Dict[str,Dict[str,float]] = {
+            'Sub-problems': {},
+            'NoGoods': {'Assert': 0, 'Core Conflict': 0},
+            'LP Solver': {'Calls': 0, 'Time (s)': 0, 'Prevent calls': 0, 'Prevent cost (s)': 0}
+        }
+        to_consider_checkers: List[OptChecker] = self.__checkers
+        if thread_id != -1:
+            to_consider_checkers = [self.__checkers[thread_id]]
+        for optChecker in to_consider_checkers:                
+            t_statistics: Dict[str,Union[Dict[str,float], float]] = optChecker.get_statistics()
+            for pid in optChecker.get_statistics():
+                pid_category: str = pid.rsplit('(')[0]
+                if pid_category not in statistics['Sub-problems']:
+                    statistics['Sub-problems'][pid_category] = 0
+                statistics['Sub-problems'][pid_category] += 1
+                statistics['NoGoods']['Assert'] += t_statistics[pid]['NoGoods']['Assert']
+                statistics['NoGoods']['Core Conflict'] += t_statistics[pid]['NoGoods']['Core Conflict']
+                statistics['LP Solver']['Calls'] += t_statistics[pid]['LP Solver']['Calls']
+                statistics['LP Solver']['Time (s)'] += t_statistics[pid]['LP Solver']['Time (s)']
+                statistics['LP Solver']['Prevent calls'] += t_statistics[pid]['LP Solver']['Prevent calls']
+                statistics['LP Solver']['Prevent cost (s)'] += t_statistics[pid]['LP Solver']['Prevent cost (s)']
+        return statistics
+    
+    def set_lazy_mode(self, is_lazy:bool) -> None:
+        self.__is_lazy = is_lazy
