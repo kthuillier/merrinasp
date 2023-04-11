@@ -54,6 +54,7 @@ Options:
   --lp-solver=<arg>       : Set LP solver
    <arg>: {cbc, gurobi, cplex} (default lp-solver=cbc)
   --[no-]show-opt-solution: Show LP solution and value of objective function
+  --[no-]lazy-mode: Check the satisfiability of linear constraints at the end of the resolution process
 ```
 
 Example:

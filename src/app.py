@@ -39,7 +39,6 @@ class Application:
         self.lp_epsilon: float = 10**-3
         self.show_continous_solutions_flag: Flag = Flag(False)
         self.continous_assignment: Dict[str, float] = None
-        self.show_traces_flag: Flag = Flag(False)
         self.lazy_mode: Flag = Flag(False)
 
     #Clingo#Function#Overwrite##################################################
@@ -64,9 +63,6 @@ class Application:
                          "Lazy SMT resolution (increase resolution speed)",
                          self.lazy_mode)
 
-        options.add_flag(group, "trace",
-                         "Enables detailed output of theory propagation",
-                         self.show_traces_flag)
 
     def parse_lp_solver_option(self, s: str) -> bool:
         """_summary_
