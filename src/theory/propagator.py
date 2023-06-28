@@ -42,15 +42,14 @@ class OptChecker:
 
         self.__lp_solver: SolverLp = SolverLp(lp_solver)
 
+        #CONSTRAINT#INITIALISATION##############################################
+        self.__lp_constraints: Dict[int, Dict[int, Dict[Tuple[int,], Constraint]]] = {}
+        
         #MEMORY#INITIALISATION##################################################
         self.__cid_data: Dict[int, Dict[str, Any]] = {}
         self.__sid_data: Dict[int, Dict[str, Any]] = {}
         self.__pid_data: Dict[str, Dict[str, Any]] = {}
         self.__condid_data: Dict[int, Dict[str, Any]] = {}
-
-        self.__cid_free: Set[int] = set()
-        self.__cid_wait: Set[int] = set()
-        self.__cid_added: Set[int] = set()
 
         #INITIALISE#OPTIMISATION#PROBLEM#STRUCTURE##############################
         changes: Set[int] = set()
@@ -71,6 +70,7 @@ class OptChecker:
                 'condid': set(),
                 'term': {},
                 'complete': False,
+                'constraints': [],
             }
 
             self.__sid_data.setdefault(sid, {
@@ -84,7 +84,6 @@ class OptChecker:
                 'complete': False
             })['cid'].add(cid)
 
-            self.__cid_free.add(cid)
             if sid_guess is not None:
                 changes.add(sid)
 
@@ -113,6 +112,8 @@ class OptChecker:
                     'condid': set(),
                     'guess': None
                 })['condid'].add(condid)
+
+            self.__cid_data[cid]['constraints'] = self.__extract_lpconstraints(cid)
 
         #LAZY#MODE#INITIALISATION###############################################
         lazy_mode: bool = False
@@ -163,6 +164,58 @@ class OptChecker:
             data: Tuple = ('assert', op, bound)
         return (cid, pid, data, condids)
 
+    def __rec_extract_lpconstraints(self, cid: int, condids: List[int]) -> List[Tuple[List[int], List[Term]]]:
+        if len(condids) == 0:
+            return [([], [])]
+        condid: int = condids[0]
+        terms: List[Term] = self.__cid_data[cid]['term'][condid]
+        extracted_lpconstraints = self.__rec_extract_lpconstraints(cid, condids[1:])
+        extracted_lpconstraints_ = []
+        for ext_condids, ext_terms in extracted_lpconstraints:
+            # case: true
+            extracted_lpconstraints_+= [
+                ([condid] + ext_condids, terms + ext_terms)
+            ]
+            # case: false
+            if self.__condid_data[condid]['sid'] > 1:
+                extracted_lpconstraints_+= [
+                    ([f'-{condid}'] + ext_condids, ext_terms)
+                ]
+        return extracted_lpconstraints_
+
+    def __extract_lpconstraints(self, cid: int) -> List[Tuple[List[int], Union[Constraint, None]]]:
+        """_summary_
+
+        :param timestamp: _description_
+        :type timestamp: int
+        :param cids: _description_
+        :type cids: Set[int]
+        """
+        pid: str = self.__cid_data[cid]['pid']
+        ctype: CType = self.__cid_data[cid]['data'][0]
+        if ctype in ['assert', 'constraint', 'objective']:
+            extract_lpconstraints = self.__rec_extract_lpconstraints(
+                cid, list(self.__cid_data[cid]['term'].keys())
+            )
+            output: List[Tuple[List[int], Union[Constraint, None]]] = []
+            for ext_condids, ext_terms in extract_lpconstraints:
+                cons: Constraint = (
+                    ctype,
+                    ext_terms,
+                    self.__cid_data[cid]['data'][1],
+                    self.__cid_data[cid]['data'][2]
+                ) #type: ignore
+                output.append((ext_condids, cons))
+            return output
+        elif ctype == 'dom':
+            var_name = self.__cid_data[cid]['data'][1]
+            lower_bound, upper_bound = self.__cid_data[cid]['data'][2]
+            cons: Constraint = ('dom', var_name, lower_bound, upper_bound)
+            return [([], cons)]
+        else:
+            print('Error: unknown contraint type:', ctype)
+            exit(0)
+
     def __add_lpconstraints(self, timestamp: int, cids: Set[int]) -> None:
         """_summary_
 
@@ -173,7 +226,6 @@ class OptChecker:
         """
         changes: Dict[str, List[Tuple[int, Constraint]]] = {}
         for cid in cids:
-            self.__cid_added.add(cid)
             pid: str = self.__cid_data[cid]['pid']
             ctype: CType = self.__cid_data[cid]['data'][0]
             if ctype in ['assert', 'constraint', 'objective']:
@@ -185,7 +237,6 @@ class OptChecker:
                     if (guess_condid is not None) and (guess_condid):
                         expr.extend(terms)
                 if len(expr) == 0:
-                    self.__cid_added.remove(cid)
                     continue
                 cons: Constraint = (
                     ctype,
@@ -270,6 +321,13 @@ class OptChecker:
         :param changes: _description_
         :type changes: List[int]
         """
+        # print('\tChanges:')
+        # for sid in sorted(changes):
+        #     if sid <= 1:
+        #         continue
+        #     sid_guess: bool = control.assignment.value(sid)
+        #     for cid in sorted(self.__sid_data[sid]['cid']):
+        #         print('\t\t', self.__cid_data[cid]['atom'], sid_guess)
         # ======================================================================
         # Update SID states
         # ======================================================================
@@ -328,8 +386,6 @@ class OptChecker:
             if pid_complete:
                 complete_pid.add(pid)
                 
-        
-
     def get_unguess(self) -> Set[int]:
         """_summary_
 
@@ -364,7 +420,7 @@ class OptChecker:
                 # nogood.add(scondid)
         return list(nogood)
 
-    def __generate_assert_nogoods(self, pid: int, cid_asserts: List[int]) -> List[int]:
+    def __generate_assert_nogoods(self, pid: int, cid_asserts: Dict[int, List[int]]) -> List[List[int]]:
         """_summary_
 
         :param pid: _description_
@@ -372,25 +428,53 @@ class OptChecker:
         :return: _description_
         :rtype: List[int]
         """
-        nogood: Set[int] = set()
-        for cid in self.__pid_data[pid]['cid']:
-            cid: int
-            sid: int = self.__cid_data[cid]['sid']
-            guess: bool = self.__cid_data[cid]['guess']
-            if guess is None or not guess:
-                nogood.add(-sid)
-        for cid in cid_asserts:
-            sid: int = self.__cid_data[cid]['sid']
-            nogood.add(sid)
-            for condid in self.__cid_data[cid]['condid']:
+        # nogood: Set[int] = set()
+        # for cid in self.__pid_data[pid]['cid']:
+        #     cid: int
+        #     sid: int = self.__cid_data[cid]['sid']
+        #     guess: bool = self.__cid_data[cid]['guess']
+        #     if guess is None or not guess:
+        #         nogood.add(-sid)
+        # for cid in cid_asserts:
+        #     sid: int = self.__cid_data[cid]['sid']
+        #     nogood.add(sid)
+        #     for condid in self.__cid_data[cid]['condid']:
+        #         condid_guess: bool = self.__condid_data[condid]['guess']
+        #         scondid: int = self.__condid_data[condid]['sid']
+        #         if condid_guess is None or not condid_guess:
+        #             nogood.add(-scondid)
+        #         else:
+        #             nogood.add(scondid)
+        nogoods: List[List[int]] = []
+        for cid_assert in cid_asserts:
+            nogood: List[int] = []
+            sid: int = self.__cid_data[cid_assert]['sid']
+            nogood.append(sid)
+            for condid in self.__cid_data[cid_assert]['condid']:
                 condid_guess: bool = self.__condid_data[condid]['guess']
                 scondid: int = self.__condid_data[condid]['sid']
                 if condid_guess is None or not condid_guess:
-                    nogood.add(-scondid)
+                    nogood.append(-scondid)
                 else:
-                    nogood.add(scondid)
-                
-        return list(nogood)
+                    nogood.append(scondid)
+            for cid_a in cid_asserts[cid_assert]:
+                sid_a: int = self.__cid_data[cid_a]['sid']
+                nogood.append(-sid_a)
+            nogoods.append(nogood)
+        return nogoods
+
+    def __get_unused_lpconstraints(self, pid: str) -> Dict[int, List[Constraint]]:
+        output: Dict[int, List[Constraint]] = {}
+        for cid in self.__pid_data[pid]['cid']:
+            cid_guess: bool = self.__cid_data[cid]['guess']
+            if cid_guess is not None and cid_guess:
+                continue
+            cid_constraints: List[Constraint] = [
+                constraints
+                for _, constraints in self.__cid_data[cid]['constraints']
+            ]
+            output[cid] = cid_constraints
+        return output
 
     def check(self) -> List[List[int]]:
         """_summary_
@@ -405,10 +489,11 @@ class OptChecker:
             assert(self.__pid_data[pid]['complete'])
             core_conflict: Union[None, List[int]] = self.__lp_solver.check(pid)
             if core_conflict is None:
-                not_valid_asserts_cid: List[int] = self.__lp_solver.ensure(pid)
+                unused_lpconstraints: Dict[int, List[Constraint]] = self.__get_unused_lpconstraints(pid)
+                not_valid_asserts_cid: Dict[int, List[int]] = self.__lp_solver.ensure(pid, unused_lpconstraints)
                 if len(not_valid_asserts_cid) != 0:
-                    nogood: int = self.__generate_assert_nogoods(pid, not_valid_asserts_cid)
-                    nogoods.append(nogood)
+                    nogood: List[List[int]] = self.__generate_assert_nogoods(pid, not_valid_asserts_cid)
+                    nogoods.extend(nogood)
             else:
                 nogood: List[int] = self.__generate_core_nogoods(core_conflict)
                 nogoods.append(nogood)

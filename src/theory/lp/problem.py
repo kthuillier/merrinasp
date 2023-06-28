@@ -563,17 +563,83 @@ class ProblemLp:
         optimums = self.__memory_stack[-1].optimums
         return (assignment, optimums)
 
-    def ensure(self) -> List[int]:
+    def compute_core_optimum(self, op: str, bound: float, expr: LpAffineExpression, unused_lp: Dict[int, List[Constraint]]) -> List[int]:
+        """_summary_
+
+        :return: _description_
+        :rtype: List[int]
+        """
+        core_optimum: List[int] = []
+        added_constraints: List[int] = []
+        for cid in unused_lp:
+            for constraint in unused_lp[cid]:
+                self.add_constraint(cid, constraint) #type: ignore
+                
+                valid_assert: bool = True
+                if op == '=':
+                    self.__problem.setObjective(-expr)
+                    # self.__remove_unused_pulp_variable()
+                    status, expr_v = self.__opt_solve(-cid)
+                    if status == -2:
+                        continue
+                    elif -expr_v <= bound:
+                        self.__problem.setObjective(expr)
+                        # self.__remove_unused_pulp_variable()
+                        status, expr_v = self.__opt_solve(cid)
+                        if status == -2:
+                            continue
+                        else:
+                            valid_assert: bool = expr_v >= bound
+                    else:
+                        valid_assert: bool = False
+                elif op == '<' or op == '<=':
+                    self.__problem.setObjective(-expr)
+                    # self.__remove_unused_pulp_variable()
+                    status, expr_v = self.__opt_solve(-cid)
+                    if status == -2:
+                        continue
+                    elif op == '<':
+                        valid_assert: bool = -expr_v < bound
+                    else:
+                        valid_assert: bool = -expr_v <= bound
+
+                elif op == '>' or op == '>=':
+                    self.__problem.setObjective(expr)
+                    # self.__remove_unused_pulp_variable()
+                    status, expr_v = self.__opt_solve(cid)
+                    if status == -2:
+                        continue
+                    elif op == '>':
+                        valid_assert: bool = expr_v > bound
+                    else:
+                        valid_assert: bool = expr_v >= bound
+                    
+                if valid_assert or status == -1:
+                    core_optimum.append(cid)
+                    self.__remove_pulp_constraint(cid)
+                else:
+                    added_constraints.append(cid)
+                    break
+        
+        for cid in added_constraints:
+            self.__remove_pulp_constraint(cid)
+        self.__remove_unused_pulp_variable()
+
+        return core_optimum
+
+    def ensure(self, unused_lp: Dict[int, List[Constraint]]) -> Dict[int, List[int]]:
         """_summary_
 
         :return: _description_
         :rtype: bool
         """
         if len(self.__problem.constraints) == 0:
-            return []
-
+            return {}
+        
+        opt_cores: Dict[int, List[int]] = {}
         for cid in self.__memory_stack[-1].asserts[:]:
             expr, op, bound = self.__asserts[cid]
+            valid_assert: bool = True
             if op == '=':
                 self.__problem.setObjective(-expr)
                 self.__remove_unused_pulp_variable()
@@ -614,12 +680,14 @@ class ProblemLp:
 
             if valid_assert:
                 self.__memory_stack[-1].asserts.remove(cid)
-
+            else:
+                opt_cores[cid] = self.compute_core_optimum(op, bound, expr, unused_lp)
+                
         if len(self.__memory_stack[-1].asserts) != 0:
             self.__statistics['NoGoods']['Assert'] += 1
-            return self.__memory_stack[-1].asserts.copy()
+            return opt_cores
         
-        return []
+        return {}
 
     def __str__(self) -> str:
         """_summary_

@@ -10,7 +10,7 @@ from pulp import (
     PULP_CBC_CMD,
 )
 
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union, Set
 
 from .parser import Constraint
 
@@ -77,7 +77,7 @@ class SolverLp:
             cids: List[Tuple[int, Constraint]] = changes[pid]
             self.__problems[pid].update(timestamp, cids)
 
-    def check(self, pid: List[str]) -> List[int]:
+    def check(self, pid: str) -> List[int]:
         """_summary_
 
         :param pid: _description_
@@ -101,7 +101,7 @@ class SolverLp:
             return self.__problems[pid].solve()
         return (None, [])
 
-    def ensure(self, pid: str) -> List[int]:
+    def ensure(self, pid: str, unused_lp: Dict[int, List[Constraint]]) -> Dict[int, List[int]]:
         """_summary_
 
         :param pid: _description_
@@ -110,8 +110,8 @@ class SolverLp:
         :rtype: List[int]
         """
         if pid not in self.__problems:
-            return []
-        not_valid_asserts_cid: List[int] = self.__problems[pid].ensure()
+            return {}
+        not_valid_asserts_cid: Dict[int, List[int]] = self.__problems[pid].ensure(unused_lp)
         return not_valid_asserts_cid
 
     def get_statistics(self, pid: str) -> Dict[str, Dict[str, float]]:
