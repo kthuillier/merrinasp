@@ -35,15 +35,15 @@ class OptChecker:
         :param states: _description_
         :type states: Dict[int, bool]
         """
+        
+        self.preprocessing_time: float = time()
+        
         #SOLVER#INITIALISATION##################################################
         lp_solver: str = 'cbc'
         if 'lp_solver' in kwargs:
             lp_solver: str = kwargs['lp_solver']
 
         self.__lp_solver: SolverLp = SolverLp(lp_solver)
-
-        #CONSTRAINT#INITIALISATION##############################################
-        self.__lp_constraints: Dict[int, Dict[int, Dict[Tuple[int,], Constraint]]] = {}
         
         #MEMORY#INITIALISATION##################################################
         self.__cid_data: Dict[int, Dict[str, Any]] = {}
@@ -126,9 +126,9 @@ class OptChecker:
                 init.add_watch(sid)
             else:
                 init.remove_watch(sid)
-        #TEST###################################################################
-        for pid in self.__pid_data:
-            assert(self.__pid_data[pid]['complete'] is None or not self.__pid_data[pid]['complete'])
+                
+        self.preprocessing_time = time() - self.preprocessing_time
+        
         
 
     def __extract_atom(self, atom: TheoryAtom) -> Tuple[int, str, Tuple, Dict]:
@@ -654,10 +654,11 @@ class OptPropagator:
         :return: _description_
         :rtype: Dict[str, Dict[str, float]]
         """
-        statistics: Dict[str,Dict[str,float]] = {
+        statistics: Dict[str,Any] = {
             'Sub-problems': {},
             'NoGoods': {'Assert': 0, 'Core Conflict': 0},
-            'LP Solver': {'Calls': 0, 'Time (s)': 0, 'Prevent calls': 0, 'Prevent cost (s)': 0}
+            'LP Solver': {'Calls': 0, 'Time (s)': 0, 'Prevent calls': 0, 'Prevent cost (s)': 0},
+            'Preprocessing': {'LP Grounding Time': 0}
         }
         to_consider_checkers: List[OptChecker] = self.__checkers
         if thread_id != -1:
@@ -675,6 +676,7 @@ class OptPropagator:
                 statistics['LP Solver']['Time (s)'] += t_statistics[pid]['LP Solver']['Time (s)']
                 statistics['LP Solver']['Prevent calls'] += t_statistics[pid]['LP Solver']['Prevent calls']
                 statistics['LP Solver']['Prevent cost (s)'] += t_statistics[pid]['LP Solver']['Prevent cost (s)']
+            statistics['Preprocessing']['LP Grounding Time'] += optChecker.preprocessing_time
         return statistics
     
     def set_lazy_mode(self, is_lazy:bool) -> None:
