@@ -573,6 +573,9 @@ class ProblemLp:
         added_constraints: List[int] = []
         for cid in unused_lp:
             for constraint in unused_lp[cid]:
+                if constraint[0] != 'constraint':
+                    continue
+                
                 self.add_constraint(cid, constraint) #type: ignore
                 
                 valid_assert: bool = True
