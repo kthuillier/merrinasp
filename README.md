@@ -1,6 +1,6 @@
-# MERRIN_Generic: `clingopt`
+# MerrinASP: `clingopt`
 
-`clingopt` is a generic implementation of the MERRIN approach (https://github.com/bioasp/merrin) extended to all the linear optimisation problem.
+`clingopt` is a generic implementation of the MERRIN-ASP approach (https://github.com/bioasp/merrin) extended to all the linear optimisation problem.
 It extends the ASP solver `clingo` with linear constraints.
 
 ## Install
