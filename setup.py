@@ -14,6 +14,7 @@ setup(
     install_requires=[
         'pulp',
         'clingo',
+        'optlang'
     ],
     test_suite='nose.collector',
     tests_require=['nose'],

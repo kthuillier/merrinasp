@@ -35,16 +35,16 @@ class OptChecker:
         :param states: _description_
         :type states: Dict[int, bool]
         """
-        
+
         self.preprocessing_time: float = time()
-        
+
         #SOLVER#INITIALISATION##################################################
         lp_solver: str = 'cbc'
         if 'lp_solver' in kwargs:
             lp_solver: str = kwargs['lp_solver']
 
         self.__lp_solver: SolverLp = SolverLp(lp_solver)
-        
+
         #MEMORY#INITIALISATION##################################################
         self.__cid_data: Dict[int, Dict[str, Any]] = {}
         self.__sid_data: Dict[int, Dict[str, Any]] = {}
@@ -119,17 +119,17 @@ class OptChecker:
         lazy_mode: bool = False
         if 'lazy_mode' in kwargs:
             lazy_mode: bool = kwargs['lazy_mode']
-            
+
         #INITIALISE#WATCHED#VARIABLES###########################################
         for sid in self.__sid_data:
             if not lazy_mode:
                 init.add_watch(sid)
             else:
                 init.remove_watch(sid)
-                
+
         self.preprocessing_time = time() - self.preprocessing_time
-        
-        
+
+
 
     def __extract_atom(self, atom: TheoryAtom) -> Tuple[int, str, Tuple, Dict]:
         """_summary_
@@ -385,7 +385,7 @@ class OptChecker:
             self.__pid_data[pid]['complete'] = pid_complete
             if pid_complete:
                 complete_pid.add(pid)
-                
+
     def get_unguess(self) -> Set[int]:
         """_summary_
 
@@ -511,7 +511,7 @@ class OptChecker:
             if pid_assignment is not None:
                 assignment[pid] = (pid_assignment, optimums)
         return assignment
-    
+
     def get_statistics(self) -> Dict[str, Dict[str, Dict[str, float]]]:
         """_summary_
 
@@ -524,7 +524,7 @@ class OptChecker:
             if pid_statistics is not None:
                 statistics[pid] = pid_statistics
         return statistics
-        
+
 
 #Class#Propagator###############################################################
 
@@ -663,7 +663,7 @@ class OptPropagator:
         to_consider_checkers: List[OptChecker] = self.__checkers
         if thread_id != -1:
             to_consider_checkers = [self.__checkers[thread_id]]
-        for optChecker in to_consider_checkers:                
+        for optChecker in to_consider_checkers:
             t_statistics: Dict[str,Union[Dict[str,float], float]] = optChecker.get_statistics()
             for pid in optChecker.get_statistics():
                 pid_category: str = pid.rsplit('(')[0]
@@ -678,17 +678,17 @@ class OptPropagator:
                 statistics['LP Solver']['Prevent cost (s)'] += t_statistics[pid]['LP Solver']['Prevent cost (s)']
             statistics['Preprocessing']['LP Grounding Time'] += optChecker.preprocessing_time
         return statistics
-    
+
     def set_lazy_mode(self, is_lazy:bool) -> None:
         self.__is_lazy = is_lazy
-    
+
     def add_nogood(self, satoms: List[Tuple[Symbol, bool]]) -> None:
         nogood: List[int] = [
             self.__atom_db[satom][1] * (1 if value else -1)
             for satom, value in satoms
         ]
         self.__waiting_nogoods.append(nogood)
-        
+
     def add_clause(self, satoms: List[Tuple[Symbol, bool]]) -> None:
         clause: List[int] = [
             self.__atom_db[satom][1] * (-1 if value else 1)

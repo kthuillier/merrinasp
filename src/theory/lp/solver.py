@@ -3,11 +3,11 @@
 
 #Import#########################################################################
 
-from pulp import (
-    LpSolver,
-    CPLEX_CMD,
-    GUROBI_CMD,
-    PULP_CBC_CMD,
+from optlang import (
+    interface,
+    glpk_interface,
+    cplex_interface,
+    gurobi_interface
 )
 
 from typing import Any, Dict, List, Tuple, Union, Set
@@ -26,16 +26,8 @@ class SolverLp:
         """_summary_
         """
 
-        self.__lp_solver: LpSolver = PULP_CBC_CMD
-        if lp_solver == 'cbc':
-            self.__lp_solver = PULP_CBC_CMD
-        elif lp_solver == 'cplex':
-            self.__lp_solver = CPLEX_CMD
-        elif lp_solver == 'gurobi':
-            self.__lp_solver = GUROBI_CMD
-        else:
-            print(f'LP Solver ("{lp_solver}") does not exist.')
-            exit(0)
+        self.__lp_solver = lp_solver
+        
 
         self.__problems: Dict[str, ProblemLp] = {}
 
