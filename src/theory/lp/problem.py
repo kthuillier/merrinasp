@@ -36,6 +36,7 @@ from .parser import (
 
 # Type#Alias#####################################################################
 
+EPSILON: float = 10**-5
 
 # Class#LP#Problem###############################################################
 
@@ -99,14 +100,14 @@ class ProblemLp:
 
         self.__variables: Dict[Variable, LpVariable] = {}
 
-        self.__asserts: Dict[int, Tuple[LpAffineExpression, str, float]] = {}
+        self.__asserts: Dict[int, LpConstraint] = {}
         self.__objectives: Dict[int, LpVariable] = {}
 
         self.__statistics: Dict[str, Dict[str, float]] = {
             'LP Solver': {'Time (s)': 0, 'Calls': 0, 'Prevent calls': 0, 'Prevent cost (s)': 0},
             'NoGoods': {'Core Conflict': 0, 'Assert': 0}
         }
-        
+
         self.__cache: List[Tuple[Tuple,int,Tuple]] = []
 
     def __build_LpAffineExpr(self, expr: AffineExpr) -> LpAffineExpression:
@@ -146,9 +147,17 @@ class ProblemLp:
         for _, var in expr:
             self.__add_variable(var)
 
-        lp_expr: LpAffineExpression = self.__build_LpAffineExpr(expr)
+        if op == '<=': # EXPR <= B ~~ ¬(EXPR >= B + EPSILON)
+            sense: int = LpConstraintGE
+            bound = bound + EPSILON
+        elif op == '>=': # EXPR >= B ~~ ¬(EXPR <= B - EPSILON EPSILON)
+            sense: int = LpConstraintLE
+            bound = bound - EPSILON
 
-        self.__asserts[cid] = (lp_expr, op, bound)
+        lp_expr: LpAffineExpression = self.__build_LpAffineExpr(expr)
+        lp_constraint: LpConstraint = LpConstraint(e=lp_expr, sense=sense, rhs=bound, name=str(cid))
+
+        self.__asserts[cid] = lp_constraint
         self.__memory_stack[-1].asserts.append(cid)
 
     def add_constraint(self, cid: int, cons: ConstraintLp) -> None:
@@ -388,7 +397,7 @@ class ProblemLp:
                 self.remove(cid)
             del self.__timestamps[self.__memory_stack[t].timestamp]
         self.__memory_stack = self.__memory_stack[:index]
-        
+
         return len(self.__memory_stack) > 0
 
     def __sat_solve(self) -> LpStatus:
@@ -469,7 +478,7 @@ class ProblemLp:
 
         for cid, cons in constraint_cache:
             self.__problem.addConstraint(cons, name=cid)
-            
+
         self.__statistics['NoGoods']['Core Conflict'] += 1
 
         return core_conflict
@@ -480,7 +489,7 @@ class ProblemLp:
         :return: _description_
         :rtype: int
         """
-        
+
         if self.__memory_stack[-1].status != 0:
             return None
 
@@ -492,7 +501,7 @@ class ProblemLp:
         ]
         self.__memory_stack[-1].status = status
         self.__memory_stack[-1].assignment = assignment
-            
+
         if status == 1 or status == -2:
             for i in range(2, len(self.__memory_stack) + 1):
                 if self.__memory_stack[-i].status == 1:
@@ -563,7 +572,7 @@ class ProblemLp:
         optimums = self.__memory_stack[-1].optimums
         return (assignment, optimums)
 
-    def compute_core_optimum(self, op: str, bound: float, expr: LpAffineExpression, unused_lp: Dict[int, List[Constraint]]) -> List[int]:
+    def compute_core_optimum(self, unused_lp: Dict[int, List[Constraint]]) -> List[int]:
         """_summary_
 
         :return: _description_
@@ -575,55 +584,19 @@ class ProblemLp:
             for constraint in unused_lp[cid]:
                 if constraint[0] != 'constraint':
                     continue
-                
-                self.add_constraint(cid, constraint) #type: ignore
-                
-                valid_assert: bool = True
-                if op == '=':
-                    self.__problem.setObjective(-expr)
-                    # self.__remove_unused_pulp_variable()
-                    status, expr_v = self.__opt_solve(-cid)
-                    if status == -2:
-                        continue
-                    elif -expr_v <= bound:
-                        self.__problem.setObjective(expr)
-                        # self.__remove_unused_pulp_variable()
-                        status, expr_v = self.__opt_solve(cid)
-                        if status == -2:
-                            continue
-                        else:
-                            valid_assert: bool = expr_v >= bound
-                    else:
-                        valid_assert: bool = False
-                elif op == '<' or op == '<=':
-                    self.__problem.setObjective(-expr)
-                    # self.__remove_unused_pulp_variable()
-                    status, expr_v = self.__opt_solve(-cid)
-                    if status == -2:
-                        continue
-                    elif op == '<':
-                        valid_assert: bool = -expr_v < bound
-                    else:
-                        valid_assert: bool = -expr_v <= bound
 
-                elif op == '>' or op == '>=':
-                    self.__problem.setObjective(expr)
-                    # self.__remove_unused_pulp_variable()
-                    status, expr_v = self.__opt_solve(cid)
-                    if status == -2:
-                        continue
-                    elif op == '>':
-                        valid_assert: bool = expr_v > bound
-                    else:
-                        valid_assert: bool = expr_v >= bound
-                    
+                self.add_constraint(cid, constraint) #type: ignore
+
+                status = self.__solve()
+                valid_assert: bool = not (status == 1 or status == -2)
+
                 if valid_assert or status == -1:
                     core_optimum.append(cid)
                     self.__remove_pulp_constraint(cid)
                 else:
                     added_constraints.append(cid)
                     break
-        
+
         for cid in added_constraints:
             self.__remove_pulp_constraint(cid)
         self.__remove_unused_pulp_variable()
@@ -638,58 +611,28 @@ class ProblemLp:
         """
         if len(self.__problem.constraints) == 0:
             return {}
-        
+
         opt_cores: Dict[int, List[int]] = {}
         for cid in self.__memory_stack[-1].asserts[:]:
-            expr, op, bound = self.__asserts[cid]
-            valid_assert: bool = True
-            if op == '=':
-                self.__problem.setObjective(-expr)
-                self.__remove_unused_pulp_variable()
-                status, expr_v = self.__opt_solve(-cid)
-                if status == -2:
-                    continue
-                elif -expr_v <= bound:
-                    self.__problem.setObjective(expr)
-                    self.__remove_unused_pulp_variable()
-                    status, expr_v = self.__opt_solve(cid)
-                    if status == -2:
-                        continue
-                    else:
-                        valid_assert: bool = expr_v >= bound
-                else:
-                    valid_assert: bool = False
-            elif op == '<' or op == '<=':
-                self.__problem.setObjective(-expr)
-                self.__remove_unused_pulp_variable()
-                status, expr_v = self.__opt_solve(-cid)
-                if status == -2:
-                    continue
-                elif op == '<':
-                    valid_assert: bool = -expr_v < bound
-                else:
-                    valid_assert: bool = -expr_v <= bound
+            constraint = self.__asserts[cid]
+            self.__problem.addConstraint(constraint)
+            self.__remove_unused_pulp_variable()
+            status = self.__solve()
+            valid_assert: bool = not (status == 1 or status == -2)
 
-            elif op == '>' or op == '>=':
-                self.__problem.setObjective(expr)
-                self.__remove_unused_pulp_variable()
-                status, expr_v = self.__opt_solve(cid)
-                if status == -2:
-                    continue
-                elif op == '>':
-                    valid_assert: bool = expr_v > bound
-                else:
-                    valid_assert: bool = expr_v >= bound
-
-            if valid_assert:
-                self.__memory_stack[-1].asserts.remove(cid)
+            if not valid_assert:
+                opt_cores[cid] = self.compute_core_optimum(unused_lp)
             else:
-                opt_cores[cid] = self.compute_core_optimum(op, bound, expr, unused_lp)
-                
+                self.__memory_stack[-1].asserts.remove(cid)
+
+            # Remove the constraints
+            del self.__problem.constraints[str(cid)]
+            self.__remove_unused_pulp_variable()
+
         if len(self.__memory_stack[-1].asserts) != 0:
             self.__statistics['NoGoods']['Assert'] += 1
             return opt_cores
-        
+
         return {}
 
     def __str__(self) -> str:
