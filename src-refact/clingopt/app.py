@@ -5,6 +5,7 @@
 # ==============================================================================
 
 from __future__ import annotations
+from typing import Literal
 import sys
 
 from clingo import (
@@ -16,22 +17,21 @@ from clingo import (
     solving,
 )
 
-from .theory.language import THEORY_LANGUAGE, rewrite
-from .theory.propagator import LpPropagator
+from theory.language import THEORY_LANGUAGE, rewrite  # type: ignore
+from theory.propagator import LpPropagator  # type: ignore
 
 # ==============================================================================
 # Application class
 # ==============================================================================
 
+
 class Application:
 
-    def __init__(self):
-        """_summary_
-        """
+    def __init__(self: Application):
         self.program_name: str = 'clingopt'
         self.version: str = '1.0.0'
-        self.propagator = None
-        self.lp_solver: str = 'glpk'
+        self.propagator: LpPropagator | None = None
+        self.lpsolver: Literal['glpk', 'gurobi', 'cplex'] = 'glpk'
         self.lp_epsilon: float = 10**-3
         self.show_continous_solutions_flag: Flag = Flag(False)
         self.continous_assignment: dict[str, float] | None = None
@@ -41,7 +41,7 @@ class Application:
     # Clingo options
     # --------------------------------------------------------------------------
 
-    def register_options(self, options: ApplicationOptions) -> None:
+    def register_options(self: Application, options: ApplicationOptions) -> None:
         """_summary_
 
         :param options: _description_
@@ -61,25 +61,24 @@ class Application:
                          "Lazy SMT resolution (increase resolution speed)",
                          self.lazy_mode)
 
-
-    def parse_lp_solver_option(self, s: str) -> bool:
+    def parse_lp_solver_option(self: Application, s: str) -> bool:
         if s in ['glpk', 'cplex', 'gurobi']:
-            self.lp_solver = s
+            self.lpsolver = s  # type: ignore
             return True
         return False
 
-    def validate_options(self) -> bool:
+    def validate_options(self: Application) -> bool:
         return True
 
     # --------------------------------------------------------------------------
     # Problem resolution
     # --------------------------------------------------------------------------
 
-    def main(self, control: Control, files: list[str]) -> None:
+    def main(self: Application, control: Control, files: list[str]) -> None:
         # Initialize the contraint propagator
-        self.propagator = LpPropagator()
+        self.propagator = LpPropagator(lpsolver=self.lpsolver)
         self.propagator.lazy(self.lazy_mode.flag)
-        control.register_propagator(self.propagator)
+        control.register_propagator(self.propagator)  # type: ignore
 
         if not files:
             files = ['-']
@@ -99,37 +98,40 @@ class Application:
     # Auxiliary functions
     # --------------------------------------------------------------------------
 
-    def print_model(self, model: solving.Model, _) -> None:
+    def print_model(self: Application, model: solving.Model, _) -> None:
+        assert self.propagator is not None
         print(' '.join(
             f'{s}' for s in model.symbols(shown=True)
         ))
-        if self.show_continous_solutions_flag.flag:
-            assignments = self.propagator.get_assignment(model.thread_id)
-            print('LP Solutions:')
-            for pid in sorted(assignments.keys()):
-                pid: str
-                align: int = 4
-                pid_assignment, pid_optimum = assignments[pid]
-                pid_optimum_str: list[str] = [str(opt) for opt in pid_optimum]
-                if len(assignments) != 1:
-                    print(' ' * align + f'PID {pid}:')
-                    align += 4
-                # Status + Optimum
-                if len(pid_optimum) != 0:
-                    print(
-                        ' ' * align + f'Optimums: {"; ".join(pid_optimum_str)}'
-                    )
-                is_unbounded: bool = float('inf') in pid_optimum or \
-                    float('-inf') in pid_optimum
-                # Variables
-                if len(pid_optimum) == 0 or not is_unbounded:
-                    variables_str: str = '; '.join(
-                        f'{var_name} = {var_value}'
-                        for var_name, var_value in sorted(pid_assignment)
-                    )
-                    print(' ' * align + f'{{ {variables_str} }}')
+        # if self.show_continous_solutions_flag.flag:
+        #     assignments = self.propagator.get_assignment(model.thread_id)
+        #     print('LP Solutions:')
+        #     for pid in sorted(assignments.keys()):
+        #         pid: str
+        #         align: int = 4
+        #         pid_assignment, pid_optimum = assignments[pid]
+        #         pid_optimum_str: list[str] = [str(opt) for opt in pid_optimum]
+        #         if len(assignments) != 1:
+        #             print(' ' * align + f'PID {pid}:')
+        #             align += 4
+        #         # Status + Optimum
+        #         if len(pid_optimum) != 0:
+        #             print(
+        #                 ' ' * align + f'Optimums: {"; ".join(pid_optimum_str)}'
+        #             )
+        #         is_unbounded: bool = float('inf') in pid_optimum or \
+        #             float('-inf') in pid_optimum
+        #         # Variables
+        #         if len(pid_optimum) == 0 or not is_unbounded:
+        #             variables_str: str = '; '.join(
+        #                 f'{var_name} = {var_value}'
+        #                 for var_name, var_value in sorted(pid_assignment)
+        #             )
+        #             print(' ' * align + f'{{ {variables_str} }}')
 
-    def __on_statistics(self, _: StatisticsMap, acc: StatisticsMap) -> None:
+    def __on_statistics(self: Application, _: StatisticsMap,
+                        acc: StatisticsMap) -> None:
+        assert self.propagator is not None
         statistics = self.propagator.get_statistics()
         acc['Propagator'] = statistics
 
@@ -137,8 +139,10 @@ class Application:
 # Main
 # ==============================================================================
 
+
 def clingopt_main() -> None:
-    sys.exit(int(clingo_main(Application(), sys.argv[1:]))) #type: ignore
+    sys.exit(int(clingo_main(Application(), sys.argv[1:])))  # type: ignore
+
 
 if __name__ == '__main__':
     clingopt_main()

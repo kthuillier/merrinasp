@@ -5,7 +5,7 @@
 # ==============================================================================
 
 from __future__ import annotations
-
+from typing import Literal
 from time import time
 
 from clingo import (
@@ -14,9 +14,8 @@ from clingo import (
     PropagateControl,
 )
 
-from .dispatcher import LpDispatcher
-
-# from .lp.solver import LpDispatcher
+from .lra.logger import Logger
+from .lra.solver import LpSolver
 
 # ==============================================================================
 # Propagator
@@ -25,12 +24,13 @@ from .dispatcher import LpDispatcher
 
 class LpPropagator:
 
-    def __init__(self: LpPropagator) -> None:
+    def __init__(self: LpPropagator,
+                 lpsolver: Literal['glpk', 'cplex', 'gurobi'] = 'glpk') -> None:
         # ----------------------------------------------------------------------
         # Parameters
         # ----------------------------------------------------------------------
         self.__islazy: bool = False
-        self.__lpsolver: str = 'glpk'
+        self.__lpsolver: str = lpsolver
         # ----------------------------------------------------------------------
         # Checkers
         # ----------------------------------------------------------------------
@@ -87,7 +87,7 @@ class LpPropagator:
         # Compute changes
         # ----------------------------------------------------------------------
         lp_checker: LpChecker = self.__checkers[control.thread_id]
-        changes: list[int] = lp_checker.unguess()
+        changes: list[int] = lp_checker.unguess(control)
         # ----------------------------------------------------------------------
         # Check LP constraints
         # ----------------------------------------------------------------------
@@ -121,8 +121,31 @@ class LpPropagator:
         lp_checker: LpChecker = self.__checkers[thread_id]
         return lp_checker.get_assignement()
 
-    def get_statistics(self: LpPropagator, thread_id: int = -1) -> dict[str, dict[str, float]]:
-        raise NotImplementedError()
+    def get_statistics(self: LpPropagator,
+                       thread_id: int = -1) -> dict[str,
+                                                    dict[str, float] | float]:
+        preprocessing_times: list[float] = []
+        all_loggers: list[Logger] = []
+        # ----------------------------------------------------------------------
+        # Extract logs
+        # ----------------------------------------------------------------------
+        if thread_id != -1 or len(self.__checkers) == 1:
+            checker: LpChecker = self.__checkers[thread_id]
+            preprocessing_time, loggers = checker.get_statistics()
+            preprocessing_times.append(preprocessing_time)
+            all_loggers.extend(loggers)
+        else:
+            for checker in self.__checkers:
+                preprocessing_time, loggers = checker.get_statistics()
+                preprocessing_times.append(preprocessing_time)
+                all_loggers.extend(loggers)
+        # ----------------------------------------------------------------------
+        # Merge the statistics of all thread
+        # ----------------------------------------------------------------------
+        statistics: dict[str, dict[str, float] | float] = {
+            'Preprocessing (s)': sum(preprocessing_times)
+        } | Logger.merge(all_loggers)
+        return statistics
 
     # --------------------------------------------------------------------------
     # Setters
@@ -139,44 +162,45 @@ class LpChecker:
 
     def __init__(self: LpChecker, init: PropagateInit,
                  lazy: bool = False, lpsolver: str = 'glpk') -> None:
+        self.preprocessing_time: float = time()
         # ----------------------------------------------------------------------
         # Linear problem solvers
         # ----------------------------------------------------------------------
-        self.lpdispatcher: LpDispatcher = LpDispatcher(init, lpsolver)
+        self.lpsolver: LpSolver = LpSolver(init, lpsolver)
 
         # ----------------------------------------------------------------------
         # Database - Clingo Literals IDs
         # ----------------------------------------------------------------------
-        self.sids: dict[int, list[int]] = {}
+        self.sids_cids: dict[int, set[int]] = {}
         self.cids_sid: dict[int, int] = {}
         self.cids_guess: dict[int, bool] = {}
         self.cids_value: dict[int, bool] = {}
+        self.cids_completed: dict[int, bool] = {}
 
         # ----------------------------------------------------------------------
         # Database - LP Constraints
         # ----------------------------------------------------------------------
-        self.pids: dict[str, list[int]] = {}
         self.cids: dict[int, list[int]] = {}
         self.condids: dict[int, list[int]] = {}
 
         # ----------------------------------------------------------------------
         # Initialize internal memory
         # ----------------------------------------------------------------------
-        self.preprocessing_time: float = time()
         for atom in init.theory_atoms:
             cid: int = atom.literal
-            pid: str = str(atom.term.arguments[0])
-            self.pids.setdefault(pid, []).append(cid)
             sid: int = init.solver_literal(cid)
-            self.sids.setdefault(sid, []).append(cid)
+            self.sids_cids.setdefault(sid, set()).add(cid)
             self.cids_sid[cid] = sid
+            self.cids.setdefault(cid, [])
             self.cids_guess[cid] = False
             self.cids_value[cid] = False
+            self.cids_completed[cid] = False
             for element in atom.elements:
                 condid: int = element.condition_id
                 scondid: int = init.solver_literal(condid)
-                self.sids.setdefault(scondid, []).append(condid)
-                self.cids.setdefault(cid, []).append(condid)
+                self.sids_cids.setdefault(scondid, set()).add(condid)
+                self.cids_sid[condid] = scondid
+                self.cids[cid].append(condid)
                 self.condids.setdefault(condid, []).append(cid)
                 self.cids_guess[condid] = False
                 self.cids_value[condid] = False
@@ -185,91 +209,132 @@ class LpChecker:
         # Declare watch variables
         # ----------------------------------------------------------------------
         if lazy:
-            for sid in self.sids:
-                init.add_watch(sid)
-        else:
-            for sid in self.sids:
+            for sid in self.sids_cids:
                 init.remove_watch(sid)
+        else:
+            for sid in self.sids_cids:
+                init.add_watch(sid)
         self.preprocessing_time = time() - self.preprocessing_time
 
     # ==========================================================================
     # Clingo's propagator override functions
     # ==========================================================================
     def undo(self: LpChecker, changes: list[int]) -> None:
-        changed_cids: list[int] = []
+        changed_cids: set[int] = set()
         for sid in changes:
-            for cid in self.sids[sid]:
-                if cid in self.cids and self.cids_guess[cid]:
-                    changed_cids.append(cid)
+            for condid in self.sids_cids[sid]:
+                if condid not in self.condids:
+                    continue
+                assert self.cids_guess[condid]
+                for cid in self.condids[condid]:
+                    if self.cids_guess[cid] and self.cids_value[cid] \
+                        and self.__cid_completed(cid):
+                        changed_cids.add(cid)
+                self.cids_guess[condid] = False
+        for sid in changes:
+            for cid in self.sids_cids[sid]:
+                if cid not in self.cids:
+                    continue
+                assert self.cids_guess[cid]
+                if self.cids_value[cid] and self.__cid_completed(cid):
+                    changed_cids.add(cid)
                 self.cids_guess[cid] = False
-        self.lpdispatcher.undo(changed_cids)
+        self.lpsolver.undo(list(changed_cids))
 
     def propagate(self: LpChecker, control: PropagateControl,
                   changes: list[int]) -> None:
+        propagate_cids: list[tuple[int, bool, list[int]]] = []
+        changed_cids: set[tuple[int, bool]] = set()
+        changed_condids: set[tuple[int, bool]] = set()
         for sid in changes:
-            changed_cids: list[int] = []
             sid_guess: bool | None = control.assignment.value(sid)
             assert sid_guess is not None
-            for cid in self.sids[sid]:
+            for cid in self.sids_cids[sid]:
                 self.cids_guess[cid] = True
                 self.cids_value[cid] = sid_guess
                 if cid in self.cids:
-                    changed_cids.append(cid)
-            if not sid_guess:  # Case: false -> update the status
-                continue
-            for cid in changed_cids:
+                    changed_cids.add((cid, sid_guess))
+                elif cid in self.condids:
+                    changed_condids.add((cid, sid_guess))
+        for condid, sid_guess in changed_condids:
+            for cid in self.condids[condid]:
+                if self.cids_guess[cid]:
+                    changed_cids.add((cid, self.cids_value[cid]))
+        for cid, sid_guess in changed_cids:
+            if self.__cid_completed(cid):
                 condids: list[int] = []
                 for condid in self.cids[cid]:
                     assert self.cids_guess[condid]
                     if self.cids_value[condid]:
                         condids.append(condid)
-                self.lpdispatcher.propagate(cid, condids)
+                propagate_cids.append((cid, sid_guess, condids))
+        self.lpsolver.propagate(propagate_cids)
 
     def check(self: LpChecker) -> list[list[int]]:
         nogoods: list[list[int]] = []
-        for pid in self.pids:
-            exists_conflict: None | list[int] = self.lpdispatcher.check_exists(
-                pid)
-            if exists_conflict is None:  # Case: no conflict
-                forall_conflict: None | list[tuple[int, list[int]]
-                                             ] = self.lpdispatcher.check_forall(pid)
-                if forall_conflict is not None:
-                    forall_nogoods: list[list[int]] = self.__nogoods_forall(
-                        forall_conflict)
-                    nogoods.extend(forall_nogoods)
-            else:  # Case: conflict
-                exists_nogood: list[int] = self.__nogoods_exists(
-                    exists_conflict)
-                nogoods.append(exists_nogood)
+        nogood: list[int]
+        # ----------------------------------------------------------------------
+        # Check and Generalize Exists conflicts
+        # ----------------------------------------------------------------------
+        exists_conflicts: list[list[int]] = self.lpsolver.check_exists()
+        for conflict in exists_conflicts:
+            nogood = self.__nogoods_exists(conflict)
+            nogoods.append(nogood)
+        # ----------------------------------------------------------------------
+        # Check and Generalize Forall conflicts
+        # ----------------------------------------------------------------------
+        forall_conflicts: list[tuple[int, list[int], list[int]]] = \
+            self.lpsolver.check_forall()
+        for cid, p_cids, up_cids in forall_conflicts:
+            nogood = self.__nogoods_forall(cid, p_cids, up_cids)
+            nogoods.append(nogood)
         return nogoods
 
     # ==========================================================================
     # Nogoods refiners
     # ==========================================================================
-    def __nogoods_forall(self: LpChecker,
-                         cids: list[tuple[int, list[int]]]) -> list[list[int]]:
-        nogoods: list[list[int]] = []
-        for cid, lcids in cids:
-            nogood: list[int] = []
-            sid: int = self.cids_sid[cid]
-            nogood.append(sid)
-            for condid in self.cids[cid]:
-                scondid: int = self.cids_sid[condid]
-                if not self.cids_guess[condid] or not self.cids_value[condid]:
-                    nogood.append(-scondid)
+    def __nogoods_forall(self: LpChecker, cid: int, prop_cids: list[int],
+                         unprop_cids: list[int]) -> list[int]:
+        nogood: list[int] = []
+        # ----------------------------------------------------------------------
+        # Forall constraint structure is prohibited
+        # ----------------------------------------------------------------------
+        sid: int = self.cids_sid[cid]
+        nogood.append(sid)
+        for condid in self.cids[cid]:
+            scondid: int = self.cids_sid[condid]
+            if not self.cids_guess[condid] or not self.cids_value[condid]:
+                nogood.append(-scondid)
+            else:
+                nogood.append(scondid)
+        # ----------------------------------------------------------------------
+        # For exists constraints, either:
+        # 1) A condid of a guessed true constraints should be changed
+        # ----------------------------------------------------------------------
+        for p_cid in prop_cids:
+            for p_condid in self.cids[p_cid]:
+                assert self.cids_guess[p_condid]
+                p_scondid: int = self.cids_sid[p_condid]
+                if not self.cids_value[p_condid]:
+                    nogood.append(-p_scondid)
                 else:
-                    nogood.append(scondid)
-            for lcid in lcids:
-                lsid: int = self.cids_sid[lcid]
-                nogood.append(-lsid)
-            nogoods.append(nogood)
-        return nogoods
+                    nogood.append(p_scondid)
+        # ----------------------------------------------------------------------
+        # 2) A guessed false constraints should be added
+        # ----------------------------------------------------------------------
+        for up_cid in unprop_cids:
+            up_sid: int = self.cids_sid[up_cid]
+            nogood.append(-up_sid)
+        return nogood
 
     def __nogoods_exists(self: LpChecker, cids: list[int]) -> list[int]:
         nogood: list[int] = []
         for cid in cids:
-            sid: int = self.cids_sid[cid]
-            nogood.append(sid)
+            sid: int = self.cids_sid[abs(cid)]
+            if cid < 0:
+                nogood.append(-sid)
+            else:
+                nogood.append(sid)
             for condid in self.cids[cid]:
                 scondid: int = self.cids_sid[condid]
                 assert self.cids_guess[condid]
@@ -282,25 +347,23 @@ class LpChecker:
     # ==========================================================================
     # Getters
     # ==========================================================================
-    def unguess(self: LpChecker) -> list[int]:
-        return [cid
-                for cid, cid_guess in self.cids_guess.items()
-                if not cid_guess
-                ]
+    def __cid_completed(self: LpChecker, cid: int) -> bool:
+        for condid in self.cids[cid]:
+            if not self.cids_guess[condid]:
+                return False
+        return True
 
-    def get_statistics(self: LpChecker) -> dict[str, dict[str, dict[str, float]]]:
-        statistics: dict[str, dict[str, dict[str, float]]] = {}
-        for pid in self.pids:
-            pid_statistics: dict[str, dict[str, float]
-                                 ] = self.lpdispatcher.get_statistics(pid)
-            if pid_statistics is not None:
-                statistics[pid] = pid_statistics
-        return statistics
+    def unguess(self: LpChecker, control: PropagateControl) -> list[int]:
+        return list({
+            self.cids_sid[cid]
+            for cid, cid_guess in self.cids_guess.items()
+            if not cid_guess
+            and control.assignment.value(self.cids_sid[cid]) is not None
+        })
 
-    def get_assignement(self: LpChecker) -> dict[str, tuple[list[float], list[tuple[str, float]]]]:
-        assignment: dict[str, tuple[list[float], list[tuple[str, float]]]] = {}
-        for pid in self.pids:
-            optimums, pid_assignment = self.lpdispatcher.optimize(pid)
-            if pid_assignment is not None:
-                assignment[pid] = (optimums, pid_assignment)
-        return assignment
+    def get_statistics(self: LpChecker) -> tuple[float, list[Logger]]:
+        return (self.preprocessing_time, self.lpsolver.get_statistics())
+
+    def get_assignement(self: LpChecker) \
+            -> dict[str, tuple[list[float], list[tuple[str, float]]]]:
+        raise NotImplementedError()
