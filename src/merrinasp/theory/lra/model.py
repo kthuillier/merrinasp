@@ -16,9 +16,15 @@ from optlang import (  # type: ignore
     cplex_interface
 )
 
-from .logger import Logger
-from .cache import LpCache
-from ..language import LpConstraint
+from merrinasp.theory.lra.logger import Logger
+from merrinasp.theory.lra.cache import LpCache
+from merrinasp.theory.language import LpConstraint
+
+# ==============================================================================
+# GLOBALS
+# ==============================================================================
+
+SLOPPY: bool = True
 
 # ==============================================================================
 # Lp Models
@@ -79,7 +85,7 @@ class LpModel:
 
     def add(self: LpModel, cid: int, constraint: LpConstraint,
             description: tuple[int, ...]) -> None:
-        constraint_type, expr, sense, b = constraint #type: ignore
+        constraint_type, expr, sense, b = constraint  # type: ignore
         # ----------------------------------------------------------------------
         # Instanciate new variables
         # ----------------------------------------------------------------------
@@ -90,6 +96,7 @@ class LpModel:
                     type='continuous'
                 )
                 self.variables[var] = lpvar
+                self.model.add(lpvar)
         # ----------------------------------------------------------------------
         # Preprocessing
         # ----------------------------------------------------------------------
@@ -112,7 +119,7 @@ class LpModel:
             )
             self.description[cid] = description
             self.constraints_exists[cid] = lpconstraint
-            self.model.add(lpconstraint)
+            self.model.add(lpconstraint, sloppy=SLOPPY)
         elif constraint_type == 'forall':
             assert cid not in self.constraints_forall
             lpforall: interface.Objective = self.lpsolver.Objective(
@@ -152,8 +159,8 @@ class LpModel:
     # Solving
     # ==========================================================================
     def check_exists(self: LpModel) -> bool:
-        if len(self.constraints_forall) > 0:
-            return True
+        # if len(self.constraints_forall) > 0:
+        #     return True
         status, _ = self.__solve()
         return status in ('optimal', 'unbounded')
 
@@ -249,7 +256,7 @@ class LpModel:
             # ------------------------------------------------------------------
             if self.check_exists():
                 conflicting_cids.append(abs(cid))
-                self.model.add(constraint)
+                self.model.add(constraint, sloppy=SLOPPY)
                 self.description[cid] = removed_description[cid]
                 del removed_description[cid]
             else:
@@ -258,7 +265,7 @@ class LpModel:
         # Re-add all the removed constraints
         # ------------------------------------------------------------------
         for constraint in removed_constraints:
-            self.model.add(constraint)
+            self.model.add(constraint, sloppy=SLOPPY)
         self.description = self.description | removed_description
 
         self.logger.conflicts_exists += 1

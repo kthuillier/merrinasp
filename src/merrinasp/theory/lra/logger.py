@@ -9,6 +9,8 @@ from __future__ import annotations
 # ==============================================================================
 # Logger
 # ==============================================================================
+
+
 class Logger:
 
     def __init__(self: Logger, pid: str) -> None:
@@ -25,12 +27,12 @@ class Logger:
         statistics: dict = {}
         statistics['Partitions'] = len(loggers)
         statistics['Conflicts'] = {
-                'Forall': sum(
-                    logger.conflicts_forall for logger in loggers
-                ),
-                'Exists': sum(
-                    logger.conflicts_exists for logger in loggers
-                )
+            'Forall': sum(
+                logger.conflicts_forall for logger in loggers
+            ),
+            'Exists': sum(
+                logger.conflicts_exists for logger in loggers
+            )
         }
         statistics['LP Solver'] = {
             'Calls': sum(

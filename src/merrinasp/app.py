@@ -5,6 +5,7 @@
 # ==============================================================================
 
 from __future__ import annotations
+from time import time
 from typing import Literal
 import sys
 
@@ -17,8 +18,8 @@ from clingo import (
     solving,
 )
 
-from theory.language import THEORY_LANGUAGE, rewrite  # type: ignore
-from theory.propagator import LpPropagator  # type: ignore
+from merrinasp.theory.language import THEORY_LANGUAGE, rewrite
+from merrinasp.theory.propagator import LpPropagator
 
 # ==============================================================================
 # Application class
@@ -28,7 +29,7 @@ from theory.propagator import LpPropagator  # type: ignore
 class Application:
 
     def __init__(self: Application):
-        self.program_name: str = 'clingopt'
+        self.program_name: str = 'merrinasp'
         self.version: str = '1.0.0'
         self.propagator: LpPropagator | None = None
         self.lpsolver: Literal['glpk', 'gurobi', 'cplex'] = 'glpk'
@@ -47,7 +48,7 @@ class Application:
         :param options: _description_
         :type options: ApplicationOptions
         """
-        group: str = 'ClingOPT Options'
+        group: str = 'MerrinASP Options'
         options.add(group, "lp-solver",
                     "Set LP solver\n"
                     "   <arg>: {glpk, gurobi, cplex} (default lp-solver=glpk)",
@@ -86,7 +87,10 @@ class Application:
         control.add('base', [], THEORY_LANGUAGE)
         rewrite(control, files)
 
+        dt: float = -time()
         control.ground([('base', [])])
+        dt += time()
+        print(f'Grounding: {dt}')
 
         control.solve(
             on_statistics=self.__on_statistics,

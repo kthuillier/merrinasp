@@ -9,9 +9,13 @@ from time import time
 
 from clingo import PropagateInit
 
-from .logger import Logger
-from .model import LpModel
-from ..language import LpConstraint, ParsedLpConstraint, parse_atom
+from merrinasp.theory.lra.logger import Logger
+from merrinasp.theory.lra.model import LpModel
+from merrinasp.theory.language import (
+    LpConstraint,
+    ParsedLpConstraint,
+    parse_atom
+)
 
 # ==============================================================================
 # Solver
@@ -64,8 +68,8 @@ class LpSolver:
         # ----------------------------------------------------------------------
         # Initialize Lp Models
         # ----------------------------------------------------------------------
-        for pid in self.pids:
-            self.models[pid] = LpModel(self.lpsolver, pid)
+        # for pid in self.pids:
+            # self.models[pid] = LpModel(self.lpsolver, pid)
 
         self.preprocessing_time = time() - self.preprocessing_time
 
@@ -110,6 +114,8 @@ class LpSolver:
         # Propagate constraints to Lp Models
         # ----------------------------------------------------------------------
         for pid, constraints in propagate_constraints.items():
+            if pid not in self.models:
+                self.models[pid] = LpModel(self.lpsolver, pid)
             self.models[pid].update(constraints)
 
     def undo(self: LpSolver, cids: list[int]) -> None:
@@ -142,11 +148,11 @@ class LpSolver:
 
     def check_exists(self: LpSolver) -> list[list[int]]:
         core_conflicts: list[list[int]] = []
-        for pid in self.pids:
+        for pid in self.get_pids(only_completed=True):
             sat: bool = self.models[pid].check_exists()
             if not sat:
                 conflict: list[int] = self.models[pid].core_unsat_exists()
-                conflict += self.models_forall.get(pid, [])
+                # conflict += self.models_forall.get(pid, [])
                 core_conflicts.append(conflict)
         return core_conflicts
 
@@ -201,7 +207,7 @@ class LpSolver:
             return True
         return [
             pid
-            for pid in self.pids
+            for pid in self.models
             if not only_completed or is_completed(pid)
         ]
 
