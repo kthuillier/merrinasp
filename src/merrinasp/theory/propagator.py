@@ -44,8 +44,6 @@ class LpPropagator:
     # Clingo's propagator override functions
     # --------------------------------------------------------------------------
     def init(self: LpPropagator, init: PropagateInit) -> None:
-        print('Initializing...')
-        dt: float = time()
         for _ in range(init.number_of_threads):
             optChecker: LpChecker = LpChecker(
                 init,
@@ -53,7 +51,6 @@ class LpPropagator:
                 lpsolver=self.__lpsolver
             )
             self.__checkers.append(optChecker)
-        print(f'\tPropagator init: {time() - dt}')
 
     def undo(self: LpPropagator, thread_id: int,
              _: Assignment, changes: list[int]) -> None:
