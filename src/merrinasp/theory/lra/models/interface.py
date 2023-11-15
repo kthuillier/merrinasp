@@ -70,14 +70,13 @@ class ModelInterface:
     # ==========================================================================
     # Core conflicts
     # ==========================================================================
-    def core_unsat_exists(self: ModelInterface) -> list[int]:
+    def core_unsat_exists(self: ModelInterface,
+                          lazy: bool = False) -> list[int]:
         raise NotImplementedError()
 
-    def core_unsat_forall(self: ModelInterface, conflicts: list[int],
-                          prop_cid: list[int],
-                          unprop_cid: list[int]) -> list[tuple[int,
-                                                               list[int],
-                                                               list[int]]]:
+    def core_unsat_forall(self: ModelInterface, conflict: int,
+                          unprop_cids: dict[int, list[tuple[LpConstraint, tuple[int, ...]]]],
+                          lazy: bool = False) -> list[int]:
         raise NotImplementedError()
 
     # ==========================================================================

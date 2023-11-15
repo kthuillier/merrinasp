@@ -155,6 +155,7 @@ class LpChecker:
 
     def __init__(self: LpChecker, init: PropagateInit,
                  lazy: bool = False, lpsolver: str = 'cbc') -> None:
+        # TODO: ground linear constraints and introduce their associated literals
         self.preprocessing_time: float = time()
         # ----------------------------------------------------------------------
         # Linear problem solvers

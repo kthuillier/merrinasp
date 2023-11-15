@@ -38,6 +38,7 @@ class ModelGurobiPy(ModelInterface):
         # ----------------------------------------------------------------------
         self.model: Model = Model(f'PID_{pid}')
         self.model.setParam('OutputFlag', 0)
+        self.model.setParam('DualReductions', 0)
         self.default_objective: LinExpr = self.model.getObjective()  # type: ignore
         self.variables: dict[str, Var] = {}
         self.constraints_exists: dict[int, Constr] = {}
@@ -248,7 +249,15 @@ class ModelGurobiPy(ModelInterface):
     # ==========================================================================
     # Core conflicts
     # ==========================================================================
-    def core_unsat_exists(self: ModelGurobiPy) -> list[int]:
+    def core_unsat_exists(self: ModelGurobiPy, lazy: bool = False) -> list[int]:
+        # ----------------------------------------------------------------------
+        # If Lazy: do not compute the unsatisfiable core
+        # ----------------------------------------------------------------------
+        if lazy:
+            return list(self.constraints_exists.keys())
+        # ----------------------------------------------------------------------
+        # Else: compute the unsatisfiable core
+        # ----------------------------------------------------------------------
         conflicting_cids: list[int] = []
         removed_constraints: list[int] = []
         removed_description: dict[int, tuple[int, ...]] = {}
@@ -279,13 +288,73 @@ class ModelGurobiPy(ModelInterface):
         self.logger.conflicts_exists += 1
         return conflicting_cids
 
-    def core_unsat_forall(self: ModelGurobiPy, conflicts: list[int],
-                          prop_cid: list[int],
-                          unprop_cid: list[int]) -> list[tuple[int,
-                                                               list[int],
-                                                               list[int]]]:
+    def core_unsat_forall(self: ModelGurobiPy, conflict: int,
+                          unprop_cids: dict[int, list[tuple[LpConstraint, tuple[int, ...]]]],
+                          lazy: bool = False) -> list[int]:
         self.logger.conflicts_forall += 1
-        return [(abs(cid), prop_cid, unprop_cid) for cid in conflicts]
+        # ----------------------------------------------------------------------
+        # If Lazy: do not compute the optimum core
+        # ----------------------------------------------------------------------
+        if lazy:
+            return list(unprop_cids.keys())
+        # ----------------------------------------------------------------------
+        # Add new objective
+        # ----------------------------------------------------------------------
+        objective, sense, b = self.constraints_forall[conflict]
+        self.model.setObjective(objective, sense=GRB.MINIMIZE)
+        self.description[conflict] = self.description_db[conflict]
+        # ----------------------------------------------------------------------
+        # For each unused constraints group
+        # ----------------------------------------------------------------------
+        optimum_cores: list[int] = []
+        for up_cid, up_constraints in unprop_cids.items():
+            assert up_cid not in self.constraints_exists
+            is_meaningfull: bool = False
+            # ------------------------------------------------------------------
+            # For each unused constraints in the group
+            # ------------------------------------------------------------------
+            for up_constraint, up_description in up_constraints:
+                # --------------------------------------------------------------
+                # Add the constraint
+                # --------------------------------------------------------------
+                self.add(up_cid, up_constraint, up_description)
+                # --------------------------------------------------------------
+                # Compute optimum
+                # --------------------------------------------------------------
+                status, optimum = self.__solve()
+                # --------------------------------------------------------------
+                # Split status
+                # --------------------------------------------------------------
+                if status == 'optimal':
+                    assert optimum is not None
+                    is_meaningfull = (sense == '>=' and optimum >= b) or \
+                        (sense == '<=' and optimum <= b)
+                elif status == 'infeasible':
+                    pass
+                elif status == 'unbounded':
+                    pass
+                else:
+                    print('Error: Unknown LP solver status:', status)
+                    sys.exit(0)
+                # --------------------------------------------------------------
+                # Remove the constraint
+                # --------------------------------------------------------------
+                self.remove([up_cid])
+                # --------------------------------------------------------------
+                # Stop if the constraint is meaningfull
+                # --------------------------------------------------------------
+                if is_meaningfull:
+                    break
+            # ------------------------------------------------------------------
+            # if the constraint is meaningfull it is added to the optimum core
+            # ------------------------------------------------------------------
+            optimum_cores.append(up_cid)
+        # ----------------------------------------------------------------------
+        # Remove current objective
+        # ----------------------------------------------------------------------
+        self.model.setObjective(self.default_objective, sense=GRB.MINIMIZE)
+        del self.description[conflict]
+        return optimum_cores
 
     # ==========================================================================
     # Getters

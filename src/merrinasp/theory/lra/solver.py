@@ -5,6 +5,7 @@
 # ==============================================================================
 
 from __future__ import annotations
+from typing import Generator
 from time import time
 
 from clingo import PropagateInit
@@ -66,6 +67,8 @@ class LpSolver:
         self.cids_guessed: dict[int, bool] = {}
         self.cids_propagated: dict[int, bool] = {}
         self.cids_constraints: dict[int, ParsedLpConstraint] = {}
+        self.cids_grounded_constraints: \
+            dict[int, list[tuple[LpConstraint, tuple[int, ...]]]] = {}
 
         # ----------------------------------------------------------------------
         # Initialize internal memory
@@ -182,17 +185,22 @@ class LpSolver:
                     pid,
                     only_propagated=True
                 )
-                unprop_cids: list[int] = [
-                    cid
+                unprop_cids: dict[int, list[tuple[LpConstraint, \
+                        tuple[int, ...]]]] = {
+                    cid: self.__ground_lpconstraints(cid)
                     for cid in self.get_constraints(pid)
                     if cid not in prop_cids
-                ]
-                conflicts: list[tuple[int, list[int], list[int]]] = \
-                    self.models[pid].core_unsat_forall(
-                        unsat_cid,
+                }
+                conflicts: list[tuple[int, list[int], list[int]]] = []
+                for conflict in unsat_cid:
+                    conflicts.append((
+                        conflict,
                         prop_cids,
-                        unprop_cids,
-                )
+                        self.models[pid].core_unsat_forall(
+                            conflict,
+                            unprop_cids
+                        )
+                    ))
                 core_conflicts.extend(conflicts)
         return core_conflicts
 
@@ -243,3 +251,52 @@ class LpSolver:
     def get_assignement(self: LpSolver,
                         pid: str) -> dict[str, float]:
         return self.models[pid].get_assignment()
+
+    # ==========================================================================
+    # Auxiliary functions
+    # ==========================================================================
+
+    def __ground_lpconstraints(self: LpSolver, cid: int) \
+                                -> list[tuple[LpConstraint, tuple[int, ...]]]:
+        # ----------------------------------------------------------------------
+        # Recursive function yielding list of list of grounded LpConstraint
+        # ----------------------------------------------------------------------
+        def partition(condids: list[int]) \
+            -> Generator[list[list[int]], None, None]:
+            if len(condids) == 1:
+                yield [condids]
+                return
+            first = condids[0]
+            for smaller in partition(condids[1:]):
+                for n, subset in enumerate(smaller):
+                    yield smaller[:n] + [[first] + subset] + smaller[n+1:]
+                yield [[first]] + smaller
+        # ----------------------------------------------------------------------
+        # Check if the grounding is already known
+        # ----------------------------------------------------------------------
+        if cid in self.cids_grounded_constraints:
+            return self.cids_grounded_constraints[cid]
+        # ----------------------------------------------------------------------
+        # Compute the Grounded LpConstraints
+        # ----------------------------------------------------------------------
+        ctype, _, expr, sense, b = self.cids_constraints[cid]
+        lpconstraints: list[tuple[LpConstraint, tuple[int, ...]]] = []
+        for list_grounded_condids in partition(list(expr.keys())):
+            for grounded_condids in list_grounded_condids:
+                lpconstraint: LpConstraint = (
+                    ctype,
+                    sum(
+                        (expr[condid] for condid in grounded_condids),
+                        []
+                    ),
+                    sense,
+                    b,
+                )
+                description: tuple[int, ...] = self.__get_description(
+                    cid,
+                    grounded_condids
+                )
+                lpconstraints.append((lpconstraint, description))
+        lpconstraints.append(((ctype, [], sense, b), tuple()))
+        self.cids_grounded_constraints[cid] = lpconstraints
+        return lpconstraints
