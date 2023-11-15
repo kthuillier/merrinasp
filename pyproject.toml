@@ -19,6 +19,7 @@ dependencies = [
     "gurobipy >= 10.0.3",
     "gurobipy-stubs >= 2.0.0",
     "optlang >= 1.8.1",
+    "pulp >= 2.7.0"
 ]
 classifiers = [
     "Programming Language :: Python :: 3.10",
