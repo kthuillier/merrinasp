@@ -5,8 +5,6 @@
 # ==============================================================================
 
 from __future__ import annotations
-from time import time
-from typing import Literal
 import sys
 
 from clingo import (
@@ -20,6 +18,11 @@ from clingo import (
 
 from merrinasp.theory.language import THEORY_LANGUAGE, rewrite
 from merrinasp.theory.propagator import LpPropagator
+from merrinasp.theory.lra.models import AVAILABLE_LPSOLVERS
+
+# ==============================================================================
+# Application class
+# ==============================================================================
 
 # ==============================================================================
 # Application class
@@ -32,7 +35,7 @@ class Application:
         self.program_name: str = 'merrinasp'
         self.version: str = '1.0.0'
         self.propagator: LpPropagator | None = None
-        self.lpsolver: Literal['glpk', 'gurobi', 'cplex'] = 'glpk'
+        self.lpsolver: str = 'cbc'
         self.lp_epsilon: float = 10**-3
         self.show_continous_solutions_flag: Flag = Flag(False)
         self.continous_assignment: dict[str, float] | None = None
@@ -42,16 +45,12 @@ class Application:
     # Clingo options
     # --------------------------------------------------------------------------
 
-    def register_options(self: Application, options: ApplicationOptions) -> None:
-        """_summary_
-
-        :param options: _description_
-        :type options: ApplicationOptions
-        """
+    def register_options(self: Application,
+                         options: ApplicationOptions) -> None:
         group: str = 'MerrinASP Options'
         options.add(group, "lp-solver",
-                    "Set LP solver\n"
-                    "   <arg>: {glpk, gurobi, cplex} (default lp-solver=glpk)",
+                    "Set LP solver\n" + \
+                    f"   <arg>: {{ {', '.join(AVAILABLE_LPSOLVERS)} }} (default lp-solver=cbc)",
                     self.parse_lp_solver_option)
 
         options.add_flag(group, "show-opt-solution",
@@ -63,7 +62,7 @@ class Application:
                          self.lazy_mode)
 
     def parse_lp_solver_option(self: Application, s: str) -> bool:
-        if s in ['glpk', 'cplex', 'gurobi']:
+        if s in AVAILABLE_LPSOLVERS:
             self.lpsolver = s  # type: ignore
             return True
         return False
@@ -87,10 +86,7 @@ class Application:
         control.add('base', [], THEORY_LANGUAGE)
         rewrite(control, files)
 
-        dt: float = -time()
         control.ground([('base', [])])
-        dt += time()
-        print(f'Grounding: {dt}')
 
         control.solve(
             on_statistics=self.__on_statistics,

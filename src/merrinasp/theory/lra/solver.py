@@ -10,7 +10,12 @@ from time import time
 from clingo import PropagateInit
 
 from merrinasp.theory.lra.logger import Logger
-from merrinasp.theory.lra.model import LpModel
+from merrinasp.theory.lra.models import (
+    ModelInterface,
+    ModelOptlang,
+    ModelGurobiPy,
+    ModelPuLP
+)
 from merrinasp.theory.language import (
     LpConstraint,
     ParsedLpConstraint,
@@ -25,16 +30,33 @@ from merrinasp.theory.language import (
 class LpSolver:
 
     def __init__(self: LpSolver, init: PropagateInit,
-                 lpsolver: str = 'glpk') -> None:
+                 lpsolver: str = 'cbc') -> None:
         # ----------------------------------------------------------------------
-        # Parameters
+        # Select LpSolver
         # ----------------------------------------------------------------------
         self.lpsolver: str = lpsolver
+
+        self.lpsolver_interface: type[ModelInterface] = ModelPuLP
+        if self.lpsolver == 'cbc':
+            self.lpsolver_interface = ModelPuLP
+        elif self.lpsolver == 'cplex-pulp':
+            self.lpsolver = 'cplex'
+            self.lpsolver_interface = ModelPuLP
+        elif self.lpsolver == 'glpk':
+            self.lpsolver_interface = ModelOptlang
+        elif self.lpsolver == 'cplex-optlang':
+            self.lpsolver = 'cplex'
+            self.lpsolver_interface = ModelOptlang
+        elif self.lpsolver == 'gurobi':
+            self.lpsolver_interface = ModelGurobiPy
+        else:
+            print(f'Warning: unknown LP solver {self.lpsolver}.')
+            print('Set to default value "cbc".')
 
         # ----------------------------------------------------------------------
         # Database - Lp Models
         # ----------------------------------------------------------------------
-        self.models: dict[str, LpModel] = {}
+        self.models: dict[str, ModelInterface] = {}
         self.models_forall: dict[str, list[int]] = {}
 
         # ----------------------------------------------------------------------
@@ -64,13 +86,6 @@ class LpSolver:
                 self.cids_constraints[-cid] = constraints[1]
                 if constraints[1][0] == 'forall':
                     self.models_forall.setdefault(pid, []).append(-cid)
-
-        # ----------------------------------------------------------------------
-        # Initialize Lp Models
-        # ----------------------------------------------------------------------
-        # for pid in self.pids:
-            # self.models[pid] = LpModel(self.lpsolver, pid)
-
         self.preprocessing_time = time() - self.preprocessing_time
 
     # ==========================================================================
@@ -115,7 +130,7 @@ class LpSolver:
         # ----------------------------------------------------------------------
         for pid, constraints in propagate_constraints.items():
             if pid not in self.models:
-                self.models[pid] = LpModel(self.lpsolver, pid)
+                self.models[pid] = self.lpsolver_interface(self.lpsolver, pid)
             self.models[pid].update(constraints)
 
     def undo(self: LpSolver, cids: list[int]) -> None:
@@ -159,6 +174,8 @@ class LpSolver:
     def check_forall(self: LpSolver) -> list[tuple[int, list[int], list[int]]]:
         core_conflicts: list[tuple[int, list[int], list[int]]] = []
         for pid in self.get_pids(only_completed=True):
+            if pid not in self.models_forall:
+                continue
             unsat_cid: list[int] = self.models[pid].check_forall()
             if len(unsat_cid) > 0:
                 prop_cids: list[int] = self.get_constraints(

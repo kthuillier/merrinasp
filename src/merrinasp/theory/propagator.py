@@ -5,7 +5,6 @@
 # ==============================================================================
 
 from __future__ import annotations
-from typing import Literal
 from time import time
 
 from clingo import (
@@ -24,8 +23,7 @@ from merrinasp.theory.lra.solver import LpSolver
 
 class LpPropagator:
 
-    def __init__(self: LpPropagator,
-                 lpsolver: Literal['glpk', 'cplex', 'gurobi'] = 'glpk') -> None:
+    def __init__(self: LpPropagator, lpsolver: str = 'cbc') -> None:
         # ----------------------------------------------------------------------
         # Parameters
         # ----------------------------------------------------------------------
@@ -69,9 +67,8 @@ class LpPropagator:
         # ----------------------------------------------------------------------
         if nogoods is not None and len(nogoods) != 0:
             self.__waiting_nogoods.extend(nogoods)
-        while len(self.__waiting_nogoods) != 0:
-            if not self.apply_nogoods(control):
-                return
+        if not self.apply_nogoods(control):
+            return
 
     def check(self: LpPropagator, control: PropagateControl) -> None:
         # ----------------------------------------------------------------------
@@ -120,7 +117,7 @@ class LpPropagator:
     def get_statistics(self: LpPropagator,
                        thread_id: int = -1) -> dict[str,
                                                     dict[str, float] | float]:
-        preprocessing_times: list[float] = []
+        preprocessing_times: list[float] = [0]
         all_loggers: list[Logger] = []
         # ----------------------------------------------------------------------
         # Extract logs
@@ -157,7 +154,7 @@ class LpPropagator:
 class LpChecker:
 
     def __init__(self: LpChecker, init: PropagateInit,
-                 lazy: bool = False, lpsolver: str = 'glpk') -> None:
+                 lazy: bool = False, lpsolver: str = 'cbc') -> None:
         self.preprocessing_time: float = time()
         # ----------------------------------------------------------------------
         # Linear problem solvers
@@ -183,6 +180,9 @@ class LpChecker:
         # Initialize internal memory
         # ----------------------------------------------------------------------
         for atom in init.theory_atoms:
+            # ------------------------------------------------------------------
+            # Parse literals data
+            # ------------------------------------------------------------------
             cid: int = atom.literal
             sid: int = init.solver_literal(cid)
             self.sids_cids.setdefault(sid, set()).add(cid)
@@ -191,6 +191,9 @@ class LpChecker:
             self.cids_guess[cid] = False
             self.cids_value[cid] = False
             self.cids_completed[cid] = False
+            # ------------------------------------------------------------------
+            # Parse conditions data
+            # ------------------------------------------------------------------
             for element in atom.elements:
                 condid: int = element.condition_id
                 scondid: int = init.solver_literal(condid)
