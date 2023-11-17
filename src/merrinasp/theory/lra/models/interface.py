@@ -185,7 +185,10 @@ class ModelInterface:
                         or (sense == '<=' and not optimum <= b + self.epsilon):
                     conflicts.append(cid)
             elif status == 'infeasible':
-                pass
+                # If one problem is infeasible, then all are
+                self._set_lpobjective(self.default_objective)
+                del self.description[cid]
+                break
             elif status == 'unbounded':
                 conflicts.append(cid)
             else:

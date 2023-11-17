@@ -31,10 +31,11 @@ from merrinasp.theory.language import (
 class LpSolver:
 
     def __init__(self: LpSolver, init: PropagateInit,
-                 lpsolver: str = 'cbc') -> None:
+                 lpsolver: str = 'cbc', strict_forall: bool = True) -> None:
         # ----------------------------------------------------------------------
         # Select LpSolver
         # ----------------------------------------------------------------------
+        self.strict_forall: bool = strict_forall
         self.lpsolver: str = lpsolver
 
         self.lpsolver_interface: type[ModelInterface] = ModelPuLP
@@ -176,7 +177,8 @@ class LpSolver:
             sat: bool = self.models[pid].check_exists()
             if not sat:
                 conflict: list[int] = self.models[pid].core_unsat_exists()
-                # conflict += self.models_forall.get(pid, [])
+                if self.strict_forall:
+                    conflict += self.models_forall.get(pid, [])
                 core_conflicts.append(conflict)
         return core_conflicts
 

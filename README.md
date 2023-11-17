@@ -58,10 +58,11 @@ To avoid syntax clashes, you must quote `"` real numbers. Instead of `0.5` write
 usage: merrinasp [number] [options] [files]
 
 Options:
-  --lp-solver=<arg>       : Set LP solver
-   <arg>: {cbc, gurobi, cplex} (default lp-solver=cbc)
+  --lp-solver=<arg>: Set LP solver
+   <arg>: { gurobi, cbc, glpk, cplex-optlang, cplex-pulp } (default lp-solver=cbc)
   --[no-]show-opt-solution: Show LP solution and value of objective function
   --[no-]lazy-mode: Check the satisfiability of linear constraints at the end of the resolution process
+  --[no-]strict-forall: Force the linear domains of forall constraints to be satisfiable
 ```
 
 Example:

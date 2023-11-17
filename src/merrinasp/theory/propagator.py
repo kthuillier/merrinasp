@@ -5,6 +5,7 @@
 # ==============================================================================
 
 from __future__ import annotations
+from typing import Literal
 from time import time
 
 from clingo import (
@@ -28,6 +29,7 @@ class LpPropagator:
         # Parameters
         # ----------------------------------------------------------------------
         self.__islazy: bool = False
+        self.__isstrictforall: bool = False
         self.__lpsolver: str = lpsolver
         # ----------------------------------------------------------------------
         # Checkers
@@ -46,7 +48,8 @@ class LpPropagator:
             optChecker: LpChecker = LpChecker(
                 init,
                 lazy=self.__islazy,
-                lpsolver=self.__lpsolver
+                lpsolver=self.__lpsolver,
+                is_strict_forall=self.__isstrictforall
             )
             self.__checkers.append(optChecker)
 
@@ -151,6 +154,9 @@ class LpPropagator:
     def lazy(self: LpPropagator, is_lazy: bool) -> None:
         self.__islazy = is_lazy
 
+    def strict_forall_check(self: LpPropagator, is_strict: bool) -> None:
+        self.__isstrictforall = is_strict
+
 # ==============================================================================
 # Checker
 # ==============================================================================
@@ -158,15 +164,15 @@ class LpPropagator:
 
 class LpChecker:
 
-    def __init__(self: LpChecker, init: PropagateInit,
-                 lazy: bool = False, lpsolver: str = 'cbc') -> None:
+    def __init__(self: LpChecker, init: PropagateInit, lazy: bool = False,
+                 lpsolver: str = 'cbc', is_strict_forall: bool = False) -> None:
         self.preprocessing_time: float = time()
         # ----------------------------------------------------------------------
         # Linear problem solvers
         # ----------------------------------------------------------------------
-        self.lpsolver: LpSolver = LpSolver(init, lpsolver)
-        # TODO: ground linear constraints and introduce their solver literals
-
+        self.lpsolver: LpSolver = LpSolver(
+            init, lpsolver, strict_forall=is_strict_forall
+        )
         # ----------------------------------------------------------------------
         # Database - Clingo Literals IDs
         # ----------------------------------------------------------------------
@@ -335,18 +341,18 @@ class LpChecker:
     def __nogoods_exists(self: LpChecker, cids: list[int]) -> list[int]:
         nogood: list[int] = []
         for cid in cids:
-            sid: int = self.cids_sid[abs(cid)]
-            if cid < 0:
-                nogood.append(-sid)
-            else:
-                nogood.append(sid)
-            for condid in self.cids[cid]:
-                scondid: int = self.cids_sid[condid]
-                assert self.cids_guess[condid]
-                if self.cids_value[condid]:
-                    nogood.append(scondid)
-                else:
-                    nogood.append(-scondid)
+            sign: Literal[-1, 1] = -1 if cid < 0 else 1
+            cid = abs(cid)
+            sid: int = self.cids_sid[cid]
+            nogood.append(sign * sid)
+            if sign == 1:
+                for condid in self.cids[cid]:
+                    scondid: int = self.cids_sid[condid]
+                    assert self.cids_guess[condid]
+                    if self.cids_value[condid]:
+                        nogood.append(scondid)
+                    else:
+                        nogood.append(-scondid)
         return nogood
 
     # ==========================================================================
@@ -371,5 +377,4 @@ class LpChecker:
 
     def get_assignement(self: LpChecker) \
             -> dict[str, tuple[list[float], list[tuple[str, float]]]]:
-        # TODO: implement the function
         raise NotImplementedError()

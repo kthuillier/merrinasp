@@ -40,6 +40,7 @@ class Application:
         self.show_continous_solutions_flag: Flag = Flag(False)
         self.continous_assignment: dict[str, float] | None = None
         self.lazy_mode: Flag = Flag(False)
+        self.strict_forall: Flag = Flag(False)
 
     # --------------------------------------------------------------------------
     # Clingo options
@@ -61,6 +62,10 @@ class Application:
                          "Lazy SMT resolution (increase resolution speed)",
                          self.lazy_mode)
 
+        options.add_flag(group, "strict-forall",
+                         "Force the linear domains of forall constraints to be satisfiable",
+                         self.strict_forall)
+
     def parse_lp_solver_option(self: Application, s: str) -> bool:
         if s in AVAILABLE_LPSOLVERS:
             self.lpsolver = s  # type: ignore
@@ -78,6 +83,7 @@ class Application:
         # Initialize the contraint propagator
         self.propagator = LpPropagator(lpsolver=self.lpsolver)
         self.propagator.lazy(self.lazy_mode.flag)
+        self.propagator.strict_forall_check(not self.strict_forall.flag)
         control.register_propagator(self.propagator)  # type: ignore
 
         if not files:
