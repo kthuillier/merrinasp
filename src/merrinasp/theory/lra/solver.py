@@ -200,7 +200,7 @@ class LpSolver:
                 conflicts: list[tuple[int, list[int], list[int]]] = []
                 for conflict in unsat_cid:
                     conflicts.append((
-                        conflict,
+                        abs(conflict),
                         prop_cids,
                         self.models[pid].core_unsat_forall(
                             conflict,
@@ -255,7 +255,7 @@ class LpSolver:
         return [model.get_statistics() for model in self.models.values()]
 
     def get_assignement(self: LpSolver,
-                        pid: str) -> dict[str, float]:
+                        pid: str) -> dict[str, float | None]:
         return self.models[pid].get_assignment()
 
     # ==========================================================================
