@@ -81,15 +81,14 @@ class ModelGurobiPy(ModelInterface):
                            expr: list[tuple[float, str]],
                            inverse: bool = False) -> LinExpr:
         expression: LinExpr = sum(
-            coeff * self.variables[var] for coeff, var in expr
-        )  # type: ignore
+            coeff * self.variables[var] for coeff, var in expr  # type: ignore
+        )
         if inverse:
             return -expression
         return expression
 
     def _add_lpconstraint(self: ModelGurobiPy, cid: int) -> Constr:
         expression, sense, b = self.constraints_exists[cid]
-        print(f'\tAdding: {expression, sense, b}')
         if sense == '>=':
             return self.model.addConstr(
                 expression >= b,  # type: ignore
@@ -106,7 +105,6 @@ class ModelGurobiPy(ModelInterface):
         )
 
     def _remove_lpconstraint(self: ModelGurobiPy, constraint: Constr) -> None:
-        print(f'\tRemoving: {constraint}')
         self.model.remove(constraint)
 
     def _lpsolve(self: ModelGurobiPy) -> tuple[LpStatus, float | None]:
