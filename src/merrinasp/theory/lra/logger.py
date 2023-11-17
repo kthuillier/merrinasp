@@ -20,6 +20,8 @@ class Logger:
         self.cache_missed: list[float] = []
         self.conflicts_exists: int = 0
         self.conflicts_forall: int = 0
+        self.model_updates: list[float] = []
+        self.model_backtracks: list[float] = []
 
     @classmethod
     def merge(cls: type[Logger],
@@ -35,12 +37,22 @@ class Logger:
             )
         }
         statistics['LP Solver'] = {
-            'Calls': sum(
-                len(logger.lpsolver_calls) for logger in loggers
-            ),
-            'Time (s)': sum(
-                sum(logger.lpsolver_calls) for logger in loggers
-            ),
+           'Modifications': {
+                'Updates (s)': sum(
+                    sum(logger.model_updates) for logger in loggers
+                ),
+                'Backtracks (s)': sum(
+                    sum(logger.model_backtracks) for logger in loggers
+                )
+            },
+           'Solving': {
+                'Calls': sum(
+                    len(logger.lpsolver_calls) for logger in loggers
+                ),
+                'Time (s)': sum(
+                    sum(logger.lpsolver_calls) for logger in loggers
+                )
+            },
             'Lp Cache': {
                 'Cache guesses': sum(
                     len(logger.cache_prevented) for logger in loggers

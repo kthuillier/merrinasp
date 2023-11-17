@@ -84,6 +84,7 @@ class ModelInterface:
 
     def add(self: ModelInterface, cid: int, constraint: LpConstraint,
             description: tuple[int, ...]) -> None:
+        dt: float = time()
         constraint_type, expr, _, _ = constraint  # type: ignore
         # ----------------------------------------------------------------------
         # Instanciate new variables
@@ -121,6 +122,7 @@ class ModelInterface:
                 sense,
                 b
             )
+        self.logger.model_updates.append(time() - dt)
 
     def add_constraint_exists(self: ModelInterface, cid: int,
                               constraint: LpConstraint,
@@ -141,6 +143,7 @@ class ModelInterface:
 
     def remove(self: ModelInterface, cids: list[int]) -> None:
         for cid in cids:
+            dt: float = time()
             if cid in self.constraints:
                 self._remove_lpconstraint(self.constraints[cid])
                 del self.description[cid]
@@ -155,6 +158,7 @@ class ModelInterface:
                 del self.objectives[cid]
             else:
                 assert False
+            self.logger.model_backtracks.append(time() - dt)
 
     # ==========================================================================
     # Solving
