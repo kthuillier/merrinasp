@@ -28,7 +28,7 @@ from pulp import ( #type: ignore
     value
 )
 
-from merrinasp.theory.lra.models.interface import ModelInterface
+from merrinasp.theory.lra.models.interface import ModelInterface, EPSILON
 from merrinasp.theory.language import LpConstraint as TypeLpConstraint
 
 # ==============================================================================
@@ -66,6 +66,11 @@ class ModelPuLP(ModelInterface):
                                                  float]] = {}
         self.objectives: dict[int, LpAffineExpression] = {}
         self.description: dict[int, tuple[int, ...]]
+
+        # ----------------------------------------------------------------------
+        # FIXME: Debug
+        # ----------------------------------------------------------------------
+        self._description_dbg: list[tuple[int, ...]] = []
 
     # ==========================================================================
     # Builder
@@ -246,7 +251,7 @@ class ModelPuLP(ModelInterface):
         # ----------------------------------------------------------------------
         dt: float = time()
         cache_check: None | tuple[str, float | None] = self.cache.check(
-            self.description.values()
+            list(self.description.values()) + self._description_dbg
         )
         if cache_check is not None:
             dt = time() - dt
@@ -269,7 +274,9 @@ class ModelPuLP(ModelInterface):
         optimum: float | None = None
         if status == 'optimal' and self.model.objective is not None:
             optimum = value(self.model.objective)  # type: ignore
-        self.cache.add(self.description.values(), status, optimum)
+        self.cache.add(
+            list(self.description.values()) + self._description_dbg,
+            status, optimum)
         dt = time() - dt
         self.logger.lpsolver_calls.append(dt)
         return status, optimum
@@ -338,6 +345,7 @@ class ModelPuLP(ModelInterface):
         # For each unused constraints group
         # ----------------------------------------------------------------------
         optimum_cores: list[int] = []
+        to_remove_constraints: list[LpConstraint] = []
         for up_cid, up_constraints in unprop_cids.items():
             assert up_cid not in self.constraints_exists
             is_meaningfull: bool = False
@@ -358,33 +366,43 @@ class ModelPuLP(ModelInterface):
                 # --------------------------------------------------------------
                 if status == 'optimal':
                     assert optimum is not None
-                    is_meaningfull = (sense == '>=' and optimum >= b) or \
-                        (sense == '<=' and optimum <= b)
+                    is_meaningfull = \
+                        (sense == '>=' and optimum >= b - EPSILON) or \
+                        (sense == '<=' and optimum <= b + EPSILON)
                 elif status == 'infeasible':
-                    pass
+                    is_meaningfull = True
                 elif status == 'unbounded':
                     pass
                 else:
                     print('Error: Unknown LP solver status:', status)
                     sys.exit(0)
                 # --------------------------------------------------------------
-                # Remove the constraint
-                # --------------------------------------------------------------
-                self.remove([up_cid])
-                # --------------------------------------------------------------
                 # Stop if the constraint is meaningfull
                 # --------------------------------------------------------------
                 if is_meaningfull:
+                    self.remove([up_cid])
                     break
+                lpconstraint: LpConstraint = self.constraints_exists[up_cid]
+                to_remove_constraints.append(lpconstraint)
+                self._description_dbg.append(up_description)
+                del self.description[up_cid]
+                del self.constraints_exists[up_cid]
             # ------------------------------------------------------------------
             # if the constraint is meaningfull it is added to the optimum core
             # ------------------------------------------------------------------
-            optimum_cores.append(up_cid)
+            if is_meaningfull:
+                optimum_cores.append(up_cid)
+        # ----------------------------------------------------------------------
+        # Remove all added constraints
+        # ----------------------------------------------------------------------
+        for lpconstraint in to_remove_constraints:
+            self.__remove_lpconstraint(lpconstraint)
+            self.__clear_unused_lpvariable()
+            self._description_dbg.clear()
         # ----------------------------------------------------------------------
         # Remove current objective
         # ----------------------------------------------------------------------
         self.model.objective = self.default_objective
-        self.__clear_unused_lpvariable()
         del self.description[conflict]
         return optimum_cores
 

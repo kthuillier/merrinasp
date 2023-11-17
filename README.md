@@ -48,6 +48,8 @@ To avoid syntax clashes, you must quote `"` real numbers. Instead of `0.5` write
 
 ***Note 2:*** All linear constraints should be in the head of the ASP rules.
 
+***Note 3:*** `&minimize` and `&maximize` are currently not handled. It will be done in a future update.
+
 ## Usage
 
 `merrinasp` supports all `clingo` options.

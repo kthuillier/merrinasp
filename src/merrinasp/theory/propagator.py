@@ -61,14 +61,19 @@ class LpPropagator:
         # ----------------------------------------------------------------------
         lp_checker: LpChecker = self.__checkers[control.thread_id]
         lp_checker.propagate(control, changes)
+        # ----------------------------------------------------------------------
+        # Add waiting nogoods
+        # ----------------------------------------------------------------------
+        if not self.apply_nogoods(control):
+            return
         nogoods: list[list[int]] | None = lp_checker.check()
         # ----------------------------------------------------------------------
         # Added and apply newly nogoods
         # ----------------------------------------------------------------------
         if nogoods is not None and len(nogoods) != 0:
             self.__waiting_nogoods.extend(nogoods)
-        if not self.apply_nogoods(control):
-            return
+            if not self.apply_nogoods(control):
+                return
 
     def check(self: LpPropagator, control: PropagateControl) -> None:
         # ----------------------------------------------------------------------
@@ -155,12 +160,12 @@ class LpChecker:
 
     def __init__(self: LpChecker, init: PropagateInit,
                  lazy: bool = False, lpsolver: str = 'cbc') -> None:
-        # TODO: ground linear constraints and introduce their associated literals
         self.preprocessing_time: float = time()
         # ----------------------------------------------------------------------
         # Linear problem solvers
         # ----------------------------------------------------------------------
         self.lpsolver: LpSolver = LpSolver(init, lpsolver)
+        # TODO: ground linear constraints and introduce their solver literals
 
         # ----------------------------------------------------------------------
         # Database - Clingo Literals IDs
@@ -227,8 +232,7 @@ class LpChecker:
                     continue
                 assert self.cids_guess[condid]
                 for cid in self.condids[condid]:
-                    if self.cids_guess[cid] and self.cids_value[cid] \
-                        and self.__cid_completed(cid):
+                    if self.cids_guess[cid] and self.__cid_completed(cid):
                         changed_cids.add(cid)
                 self.cids_guess[condid] = False
         for sid in changes:
@@ -236,7 +240,7 @@ class LpChecker:
                 if cid not in self.cids:
                     continue
                 assert self.cids_guess[cid]
-                if self.cids_value[cid] and self.__cid_completed(cid):
+                if self.__cid_completed(cid):
                     changed_cids.add(cid)
                 self.cids_guess[cid] = False
         self.lpsolver.undo(list(changed_cids))
@@ -295,18 +299,18 @@ class LpChecker:
     # ==========================================================================
     def __nogoods_forall(self: LpChecker, cid: int, prop_cids: list[int],
                          unprop_cids: list[int]) -> list[int]:
-        nogood: list[int] = []
+        nogood: set[int] = set()
         # ----------------------------------------------------------------------
         # Forall constraint structure is prohibited
         # ----------------------------------------------------------------------
         sid: int = self.cids_sid[cid]
-        nogood.append(sid)
+        nogood.add(sid)
         for condid in self.cids[cid]:
             scondid: int = self.cids_sid[condid]
             if not self.cids_guess[condid] or not self.cids_value[condid]:
-                nogood.append(-scondid)
+                nogood.add(-scondid)
             else:
-                nogood.append(scondid)
+                nogood.add(scondid)
         # ----------------------------------------------------------------------
         # For exists constraints, either:
         # 1) A condid of a guessed true constraints should be changed
@@ -316,16 +320,17 @@ class LpChecker:
                 assert self.cids_guess[p_condid]
                 p_scondid: int = self.cids_sid[p_condid]
                 if not self.cids_value[p_condid]:
-                    nogood.append(-p_scondid)
+                    nogood.add(-p_scondid)
                 else:
-                    nogood.append(p_scondid)
+                    nogood.add(p_scondid)
         # ----------------------------------------------------------------------
         # 2) A guessed false constraints should be added
         # ----------------------------------------------------------------------
         for up_cid in unprop_cids:
+            assert self.cids_guess[up_cid]
             up_sid: int = self.cids_sid[up_cid]
-            nogood.append(-up_sid)
-        return nogood
+            nogood.add(-up_sid)
+        return list(nogood)
 
     def __nogoods_exists(self: LpChecker, cids: list[int]) -> list[int]:
         nogood: list[int] = []
@@ -366,4 +371,5 @@ class LpChecker:
 
     def get_assignement(self: LpChecker) \
             -> dict[str, tuple[list[float], list[tuple[str, float]]]]:
+        # TODO: implement the function
         raise NotImplementedError()

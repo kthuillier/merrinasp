@@ -107,7 +107,7 @@ class LpSolver:
             if -cid in self.cids_constraints:
                 self.cids_guessed[-cid] = True
             # ------------------------------------------------------------------
-            # Compute new constraints
+            # Compute new lp constraints to propagate
             # ------------------------------------------------------------------
             if value:
                 self.cids_propagated[cid] = True
@@ -120,6 +120,7 @@ class LpSolver:
                     (cid, constraint, description)
                 )
                 if -cid in self.cids_constraints:
+                    self.cids_propagated[-cid] = True
                     pid, constraint = self.__get_constraints(-cid, condid)
                     description = self.__get_description(
                         -cid,
@@ -128,6 +129,10 @@ class LpSolver:
                     propagate_constraints.setdefault(pid, []).append(
                         (-cid, constraint, description)
                     )
+            else:
+                self.cids_propagated[cid] = False
+                if -cid in self.cids_constraints:
+                    self.cids_propagated[-cid] = False
         # ----------------------------------------------------------------------
         # Propagate constraints to Lp Models
         # ----------------------------------------------------------------------
@@ -145,15 +150,16 @@ class LpSolver:
             self.cids_guessed[cid] = False
             if -cid in self.cids_constraints:
                 self.cids_guessed[-cid] = False
-            self.cids_propagated[cid] = False
             # ------------------------------------------------------------------
             # Get constraints to remove from Lp Models
             # ------------------------------------------------------------------
-            pid: str = self.cids_constraints[cid][1]
-            undo_constraints.setdefault(pid, []).append(cid)
-            if -cid in self.cids_constraints:
-                pid = self.cids_constraints[-cid][1]
-                undo_constraints.setdefault(pid, []).append(-cid)
+            if self.cids_propagated[cid]:
+                pid: str = self.cids_constraints[cid][1]
+                undo_constraints.setdefault(pid, []).append(cid)
+                if -cid in self.cids_constraints:
+                    pid = self.cids_constraints[-cid][1]
+                    undo_constraints.setdefault(pid, []).append(-cid)
+            self.cids_propagated[cid] = False
         # ----------------------------------------------------------------------
         # Remove constraints from Lp Models
         # ----------------------------------------------------------------------
@@ -297,6 +303,5 @@ class LpSolver:
                     grounded_condids
                 )
                 lpconstraints.append((lpconstraint, description))
-        lpconstraints.append(((ctype, [], sense, b), tuple()))
         self.cids_grounded_constraints[cid] = lpconstraints
         return lpconstraints
