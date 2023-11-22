@@ -33,7 +33,7 @@ Homepage = "https://github.com/kthuillier/ClingOPT"
 Repository = "https://github.com/kthuillier/ClingOPT/issues"
 
 [project.scripts]
-merrinasp = "merrinasp.app:clingopt_main"
+merrinasp = "merrinasp.app:main"
 
 [tool.setuptools.package-data]
 merrinasp = ["py.typed"]

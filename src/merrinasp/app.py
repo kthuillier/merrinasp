@@ -146,9 +146,9 @@ class Application:
 # ==============================================================================
 
 
-def clingopt_main() -> None:
+def main() -> None:
     sys.exit(int(clingo_main(Application(), sys.argv[1:])))  # type: ignore
 
 
 if __name__ == '__main__':
-    clingopt_main()
+    main()
