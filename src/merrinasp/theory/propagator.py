@@ -272,12 +272,12 @@ class LpChecker:
                     changed_cids.add((cid, self.cids_value[cid]))
         for cid, sid_guess in changed_cids:
             if self.__cid_completed(cid):
-                condids: list[int] = []
+                condids: set[int] = set()
                 for condid in self.cids[cid]:
                     assert self.cids_guess[condid]
                     if self.cids_value[condid]:
-                        condids.append(condid)
-                propagate_cids.append((cid, sid_guess, condids))
+                        condids.add(condid)
+                propagate_cids.append((cid, sid_guess, list(condids)))
         self.lpsolver.propagate(propagate_cids)
 
     def check(self: LpChecker) -> list[list[int]]:
