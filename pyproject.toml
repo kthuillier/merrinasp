@@ -12,7 +12,7 @@ description = "MerrinASP extends the solver clingo with one quantifier level in 
 keywords = ["Answer Set Programming", "Quantified linear programming", "clingo", "LRA"]
 readme = "README.md"
 license = { file = "LICENCE" }
-requires-python = ">=3.10"
+requires-python = ">=3.7"
 dependencies = [
     "clingo >=5.6.1",
     "cplex >=22.1.1.0",
