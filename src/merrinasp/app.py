@@ -37,7 +37,7 @@ class Application:
         self.propagator: LpPropagator | None = None
         self.lpsolver: str = 'cbc'
         self.lp_epsilon: float = 10**-3
-        self.show_continous_solutions_flag: Flag = Flag(False)
+        self.show_lpassignments_flag: Flag = Flag(False)
         self.continous_assignment: dict[str, float] | None = None
         self.lazy_mode: Flag = Flag(False)
         self.strict_forall: Flag = Flag(False)
@@ -56,7 +56,7 @@ class Application:
 
         options.add_flag(group, "show-opt-solution",
                          "Show LP solution and value of objective function",
-                         self.show_continous_solutions_flag)
+                         self.show_lpassignments_flag)
 
         options.add_flag(group, "lazy-mode",
                          "Lazy SMT resolution (increase resolution speed)",
@@ -83,6 +83,7 @@ class Application:
         # Initialize the contraint propagator
         self.propagator = LpPropagator(lpsolver=self.lpsolver)
         self.propagator.lazy(self.lazy_mode.flag)
+        self.propagator.show_lpassignment(self.show_lpassignments_flag.flag)
         self.propagator.strict_forall_check(not self.strict_forall.flag)
         control.register_propagator(self.propagator)  # type: ignore
 
@@ -109,7 +110,10 @@ class Application:
         print(' '.join(
             f'{s}' for s in model.symbols(shown=True)
         ))
-        # if self.show_continous_solutions_flag.flag:
+        if self.show_lpassignments_flag.flag:
+            assignments = self.propagator.get_assignment(model.thread_id)
+            print(assignments)
+        # if self.show_lpassignments_flag.flag:
         #     assignments = self.propagator.get_assignment(model.thread_id)
         #     print('LP Solutions:')
         #     for pid in sorted(assignments.keys()):

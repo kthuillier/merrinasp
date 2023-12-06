@@ -100,6 +100,12 @@ class LpSolver:
                 self.cids_constraints[-cid] = constraints[1]
                 if constraints[1][0] == 'forall':
                     self.models_forall.setdefault(pid, []).append(-cid)
+
+        # ----------------------------------------------------------------------
+        # Assignment
+        # ----------------------------------------------------------------------
+        self.assignments: dict[str,
+                               tuple[str, None | dict[str, float | None]]] = {}
         self.preprocessing_time = time() - self.preprocessing_time
 
     # ==========================================================================
@@ -176,6 +182,8 @@ class LpSolver:
         # ----------------------------------------------------------------------
         for pid, constraints in undo_constraints.items():
             self.models[pid].remove(constraints)
+            if self.models[pid].is_empty():
+                del self.models[pid]
 
     # ==========================================================================
     # LP problem solvers
@@ -222,10 +230,6 @@ class LpSolver:
                 core_conflicts.extend(conflicts)
         return core_conflicts
 
-    def optimize(self: LpSolver,
-                 pid: str) -> tuple[list[float], list[tuple[str, float]]]:
-        return self.models[pid].optimize()
-
     # ==========================================================================
     # Getters
     # ==========================================================================
@@ -266,9 +270,23 @@ class LpSolver:
             return [self.models[pid].get_statistics()]
         return [model.get_statistics() for model in self.models.values()]
 
-    def get_assignement(self: LpSolver,
-                        pid: str) -> dict[str, float | None]:
-        return self.models[pid].get_assignment()
+    # ==========================================================================
+    # Assignment related functions
+    # ==========================================================================
+
+    def get_assignment(self: LpSolver) \
+            -> dict[str, tuple[str, None | dict[str, float | None]]]:
+        return self.assignments.copy()
+
+    def reset_assignment(self: LpSolver) -> None:
+        self.assignments.clear()
+
+    def optimize(self: LpSolver) \
+            -> dict[str, tuple[str, None | dict[str, float | None]]]:
+        self.assignments = {}
+        for pid in self.get_pids(only_completed=True):
+            self.assignments[pid] = self.models[pid].optimize()
+        return self.assignments
 
     # ==========================================================================
     # Auxiliary functions

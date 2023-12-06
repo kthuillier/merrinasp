@@ -25,9 +25,8 @@ from merrinasp.theory.lra.models.interface import (
 # Type Alias
 # ==============================================================================
 
-ExistsConstraint = tuple[Any, Sense, float]
-ForallConstraint = tuple[Any, Sense, float]
-Objective = tuple[Any, Sense, float]
+ExistsConstraint = tuple[interface.Constraint, Sense, float]
+ForallConstraint = tuple[interface.Objective, Sense, float]
 
 # ==============================================================================
 # Lp Models
@@ -45,7 +44,6 @@ class ModelOptlang(ModelInterface):
         # ----------------------------------------------------------------------
         self.constraints_exists: dict[int, ExistsConstraint] = {}
         self.constraints_forall: dict[int, ForallConstraint] = {}
-        self.objectives: dict[int, Objective] = {}
 
         # ----------------------------------------------------------------------
         # Lp solver interface
@@ -87,11 +85,9 @@ class ModelOptlang(ModelInterface):
     def _get_lpobjective(self: ModelOptlang) -> interface.Objective:
         return self.model.objective
 
-    def _add_lpobjective(self: ModelOptlang, expr: list[tuple[float, str]],
-                           direction: Sense = '>=') -> interface.Objective:
-        expression: Any = self._get_lpexpression(
-            expr, inverse=direction == '<='
-        )
+    def _add_lpobjective(self: ModelOptlang,
+                         expr: list[tuple[float, str]]) -> interface.Objective:
+        expression: Any = self._get_lpexpression(expr)
         return self.interface.Objective(expression, direction='min')
 
     def _set_lpobjective(self: ModelOptlang, objective: interface.Objective) \
@@ -99,13 +95,10 @@ class ModelOptlang(ModelInterface):
         self.model.objective = objective
 
     def _get_lpexpression(self: ModelOptlang,
-                           expr: list[tuple[float, str]],
-                           inverse: bool = False) -> Any:
+                           expr: list[tuple[float, str]]) -> Any:
         expression: Any = sum(
             coeff * self.variables[var] for coeff, var in expr  # type: ignore
         )
-        if inverse:
-            return -expression
         return expression
 
     def _add_lpconstraint(self: ModelOptlang, cid: int) \

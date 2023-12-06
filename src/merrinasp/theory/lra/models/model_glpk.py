@@ -70,7 +70,6 @@ from merrinasp.theory.lra.models.interface import (
 
 ExistsConstraint = tuple[list[tuple[float, str]], Sense, float]
 ForallConstraint = tuple[list[tuple[float, str]], Sense, float]
-Objective = tuple[list[tuple[float, str]], Sense, float]
 
 # ==============================================================================
 # Lp Models
@@ -88,7 +87,6 @@ class ModelGLPK(ModelInterface):
         # ----------------------------------------------------------------------
         self.constraints_exists: dict[int, ExistsConstraint] = {}
         self.constraints_forall: dict[int, ForallConstraint] = {}
-        self.objectives: dict[int, Objective] = {}
 
         # ----------------------------------------------------------------------
         # Model data
@@ -129,9 +127,10 @@ class ModelGLPK(ModelInterface):
             objective.append((coeff, varname))
         return objective
 
-    def _add_lpobjective(self: ModelGLPK, expr: list[tuple[float, str]],
-                         direction: Sense = '>=') -> list[tuple[float, str]]:
-        return self._get_lpexpression(expr, inverse=direction == '<=')
+    def _add_lpobjective(self: ModelGLPK,
+                         expr: list[tuple[float, str]]) \
+                            -> list[tuple[float, str]]:
+        return self._get_lpexpression(expr)
 
     def _set_lpobjective(self: ModelGLPK, objective: list[tuple[float, str]]) \
             -> None:
@@ -143,10 +142,8 @@ class ModelGLPK(ModelInterface):
         self.__clear_unused_lpvariable()
 
     def _get_lpexpression(self: ModelGLPK,
-                           expr: list[tuple[float, str]],
-                           inverse: bool = False) -> list[tuple[float, str]]:
-        if inverse:
-            return [(-coeff, varname) for coeff, varname in expr]
+                           expr: list[tuple[float, str]]) \
+                               -> list[tuple[float, str]]:
         return expr
 
     def _add_lpconstraint(self: ModelGLPK, cid: int) -> str:

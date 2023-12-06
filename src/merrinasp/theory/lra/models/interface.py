@@ -21,7 +21,7 @@ Sense = Literal['>=', '<=', '=']
 LpStatus = Literal['optimal', 'unbounded', 'infeasible', 'undefined']
 ExistsConstraint = tuple[Any, Sense, float]
 ForallConstraint = tuple[Any, Sense, float]
-Objective = tuple[Any, Sense, float]
+Objective = tuple[list[tuple[float, str]], Sense, float]
 
 # ==============================================================================
 # Lp Models
@@ -63,7 +63,7 @@ class ModelInterface:
         # ----------------------------------------------------------------------
         self.constraints_exists: dict[int, ExistsConstraint]
         self.constraints_forall: dict[int, ForallConstraint]
-        self.objectives: dict[int, Objective]
+        self.objectives: dict[int, Objective] = {}
 
         # ----------------------------------------------------------------------
         # Model data
@@ -85,7 +85,7 @@ class ModelInterface:
     def add(self: ModelInterface, cid: int, constraint: LpConstraint,
             description: tuple[int, ...]) -> None:
         dt: float = time()
-        constraint_type, expr, _, _ = constraint  # type: ignore
+        constraint_type, expr, sense, b = constraint
         # ----------------------------------------------------------------------
         # Instanciate new variables
         # ----------------------------------------------------------------------
@@ -95,7 +95,6 @@ class ModelInterface:
         # ----------------------------------------------------------------------
         # Split the different constraint types
         # ----------------------------------------------------------------------
-        _, expr, sense, b = constraint  # type: ignore
         if constraint_type == 'exists':
             assert cid not in self.constraints
             self.description[cid] = description
@@ -108,37 +107,25 @@ class ModelInterface:
             self.added_order.append(cid)
         elif constraint_type == 'forall':
             assert cid not in self.constraints_forall
+            if sense == '<=':
+                expr = [(-coeff, var) for coeff, var in expr]
             self.description_db[cid] = description
             self.constraints_forall[cid] = (
-                self._add_lpobjective(expr, direction=sense),
+                self._add_lpobjective(expr),
                 '>=',
                 b if sense == '>=' else -b
             )
         else:
             assert cid not in self.objectives
+            if sense == '<=':
+                expr = [(-coeff, var) for coeff, var in expr]
             self.description_db[cid] = description
             self.objectives[cid] = (
-                self._add_lpobjective(expr, direction=sense),
-                sense,
+                expr,
+                '>=',
                 b
             )
         self.logger.model_updates.append(time() - dt)
-
-    def add_constraint_exists(self: ModelInterface, cid: int,
-                              constraint: LpConstraint,
-                              description: tuple[int, ...]) -> None:
-        _, expr, sense, b = constraint  # type: ignore
-        # ----------------------------------------------------------------------
-        # Build the constraints
-        # ----------------------------------------------------------------------
-        self.description[cid] = description
-        self.constraints_exists[cid] = (
-            self._get_lpexpression(expr),
-            sense,
-            b
-        )
-        self.constraints[cid] = self._add_lpconstraint(cid)
-        self.added_order.append(cid)
 
 
     def remove(self: ModelInterface, cids: list[int]) -> None:
@@ -206,10 +193,74 @@ class ModelInterface:
         return conflicts
 
     def optimize(self: ModelInterface) \
-            -> tuple[list[float], list[tuple[str, float]]]:
-        raise NotImplementedError()
+            -> tuple[str, None | dict[str, float | None]]:
+        status: LpStatus = 'undefined'
+        assignment: dict[str, float | None] | None = None
+        # ----------------------------------------------------------------------
+        # Special case: no objective function
+        # ----------------------------------------------------------------------
+        if len(self.objectives) == 0:
+            status, _ = self._lpsolve()
+            if status == 'optimal':
+                assignment = self.get_assignment()
+                return 'feasible', assignment
+            return status, None
+        # ----------------------------------------------------------------------
+        # Merge and sort the optimization functions
+        # ----------------------------------------------------------------------
+        weighted_objectives: dict[int, list[list[tuple[float, str]]]] = {}
+        weighted_cid: dict[int, int] = {}
+        for cid, objective in self.objectives.items():
+            weight: int = int(objective[-1])
+            weighted_objectives.setdefault(weight, []).append(objective[0])
+            weighted_cid[weight] = cid
+        merged_objectives: dict[int, list[tuple[float, str]]] = {
+            weight: self.__merge_exprs(objectives)
+            for weight, objectives in weighted_objectives.items()
+        }
+        # ----------------------------------------------------------------------
+        # Iterate over the set of optimization and fix the output
+        # ----------------------------------------------------------------------
+        to_remove_constraints: list[int] = []
+        for weight, expr in merged_objectives.items():
+            ocid: int = weighted_cid[weight]
+            # ------------------------------------------------------------------
+            # Set the objective function
+            # ------------------------------------------------------------------
+            self._set_lpobjective(self._add_lpobjective(expr))
+            # ------------------------------------------------------------------
+            # Solve the LP problem
+            # ------------------------------------------------------------------
+            dt = time()
+            status, optimum = self._lpsolve()
+            dt = time() - dt
+            self.logger.lpsolver_calls.append(dt)
+            if status != 'optimal':
+                break
+            assert optimum is not None
+            # ------------------------------------------------------------------
+            # Fix the objective
+            # ------------------------------------------------------------------
+            assert ocid not in self.constraints_exists
+            self.add(
+                ocid,
+                ('exists', expr, '=', optimum),
+                (ocid,)
+            )
+            to_remove_constraints.append(ocid)
+        # ----------------------------------------------------------------------
+        # Get the assignment
+        # ----------------------------------------------------------------------
+        if status == 'optimal':
+            assignment = self.get_assignment()
+        # ----------------------------------------------------------------------
+        # Clear the model by removing the fixed objective functions
+        # ----------------------------------------------------------------------
+        self.remove(to_remove_constraints)
+        self._set_lpobjective(self.default_objective)
+        return status, assignment
 
-    def __solve(self: ModelInterface) -> tuple[str, float | None]:
+    def __solve(self: ModelInterface) -> tuple[LpStatus, float | None]:
         # ----------------------------------------------------------------------
         # CACHE: check if the problem has already been solved
         # ----------------------------------------------------------------------
@@ -220,7 +271,7 @@ class ModelInterface:
         if cache_check is not None:
             dt = time() - dt
             self.logger.cache_prevented.append(dt)
-            return cache_check
+            return cache_check  # type: ignore
         dt = time() - dt
         self.logger.cache_missed.append(dt)
         # ----------------------------------------------------------------------
@@ -241,6 +292,15 @@ class ModelInterface:
         dt = time() - dt
         self.logger.lpsolver_calls.append(dt)
         return status, optimum
+
+    def __merge_exprs(self: ModelInterface,
+                      exprs: list[list[tuple[float, str]]]) \
+                          -> list[tuple[float, str]]:
+        merged_expr: dict[str, float] = {}
+        for expr in exprs:
+            for coeff, var in expr:
+                merged_expr[var] = merged_expr.get(var, 0) + coeff
+        return [(coeff, var) for var, coeff in merged_expr.items()]
 
     # ==========================================================================
     # Core conflicts
@@ -374,6 +434,12 @@ class ModelInterface:
     def get_assignment(self: ModelInterface) -> dict[str, float | None]:
         return {var: self._get_lpvalue(var) for var in self.variables}
 
+    def is_empty(self: ModelInterface) -> bool:
+        no_constraint: bool = len(self.constraints) == 0
+        no_forall: bool = len(self.constraints_forall) == 0
+        no_obj: bool = len(self.objectives) == 0
+        return no_constraint and no_forall and no_obj
+
     # ==========================================================================
     # Refactoring
     # ==========================================================================
@@ -384,8 +450,8 @@ class ModelInterface:
     def _add_lpvariable(self: ModelInterface, varname: str) -> Any:
         raise NotImplementedError()
 
-    def _add_lpobjective(self: ModelInterface, expr: list[tuple[float, str]],
-                           direction: Sense = '>=') -> Any:
+    def _add_lpobjective(self: ModelInterface,
+                         expr: list[tuple[float, str]]) -> Any:
         raise NotImplementedError()
 
     def _get_lpobjective(self: ModelInterface) -> Any:
@@ -394,8 +460,8 @@ class ModelInterface:
     def _set_lpobjective(self: ModelInterface, objective: Any) -> None:
         raise NotImplementedError()
 
-    def _get_lpexpression(self: ModelInterface, expr: list[tuple[float, str]],
-                           inverse: bool = False) -> Any:
+    def _get_lpexpression(self: ModelInterface,
+                          expr: list[tuple[float, str]]) -> Any:
         raise NotImplementedError()
 
     def _add_lpconstraint(self: ModelInterface, cid: int) -> Any:

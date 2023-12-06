@@ -38,7 +38,6 @@ class ModelGurobiPy(ModelInterface):
         # ----------------------------------------------------------------------
         self.constraints_exists: dict[int, ExistsConstraint] = {}
         self.constraints_forall: dict[int, ForallConstraint] = {}
-        self.objectives: dict[int, Objective] = {}
 
         # ----------------------------------------------------------------------
         # Model data
@@ -70,21 +69,18 @@ class ModelGurobiPy(ModelInterface):
     def _get_lpobjective(self: ModelGurobiPy) -> LinExpr:
         return self.model.getObjective()  # type: ignore
 
-    def _add_lpobjective(self: ModelGurobiPy, expr: list[tuple[float, str]],
-                           direction: Sense = '>=') -> LinExpr:
-        return self._get_lpexpression(expr, inverse=direction == '<=')
+    def _add_lpobjective(self: ModelGurobiPy,
+                         expr: list[tuple[float, str]]) -> LinExpr:
+        return self._get_lpexpression(expr)
 
     def _set_lpobjective(self: ModelGurobiPy, objective: LinExpr) -> None:
         self.model.setObjective(objective, sense=GRB.MINIMIZE)
 
     def _get_lpexpression(self: ModelGurobiPy,
-                           expr: list[tuple[float, str]],
-                           inverse: bool = False) -> LinExpr:
+                           expr: list[tuple[float, str]]) -> LinExpr:
         expression: LinExpr = sum(
             coeff * self.variables[var] for coeff, var in expr  # type: ignore
         )
-        if inverse:
-            return -expression
         return expression
 
     def _add_lpconstraint(self: ModelGurobiPy, cid: int) -> Constr:

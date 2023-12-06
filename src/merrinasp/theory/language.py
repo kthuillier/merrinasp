@@ -13,6 +13,7 @@ import sys
 from clingo import (
     Control,
     String,
+    Number,
     TheoryAtom,
     TheoryElement,
     TheoryTerm,
@@ -26,6 +27,7 @@ from clingo.ast import (
     SymbolicTerm,
     Transformer,
     parse_files,
+    TheoryGuard
 )
 
 # ==============================================================================
@@ -78,8 +80,8 @@ THEORY_LANGUAGE: str = """
 
     &sum/1 : continuous_term, {=, <=, >=}, continuous_term, head;
 
-    &minimize/1 : continuous_term, head;
-    &maximize/1 : continuous_term, head;
+    &minimize/1 : continuous_term, {@}, constant, head;
+    &maximize/1 : continuous_term, {@}, constant, head;
 
     &assert/1 : continuous_term, {=, <=, >=, <, >}, continuous_term, head
 }.
@@ -115,6 +117,11 @@ class HeadBodyTransformer(Transformer):
                     )
                 ],
                 False
+            )
+        if term.name in ['minimize', 'maximize'] and not atom.guard:  # type: ignore
+            atom.guard = TheoryGuard(
+                '@',
+                SymbolicTerm(term.location, Number(0))  # type: ignore
             )
         return atom
 
@@ -203,7 +210,7 @@ def parse_objective(atom: TheoryAtom) -> list[ParsedLpConstraint]:
     else:
         print('Error: unknown theory atom:', atom)
         sys.exit(0)
-    weight: int = 1
+    weight: int = atom.guard[1].number  # type: ignore
     # --------------------------------------------------------------------------
     # Parse expression
     # --------------------------------------------------------------------------

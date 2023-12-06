@@ -30,6 +30,7 @@ class LpPropagator:
         # ----------------------------------------------------------------------
         self.__islazy: bool = False
         self.__isstrictforall: bool = False
+        self.__show_lpassignment: bool = False
         self.__lpsolver: str = lpsolver
         # ----------------------------------------------------------------------
         # Checkers
@@ -94,6 +95,8 @@ class LpPropagator:
         # ----------------------------------------------------------------------
         lp_checker.propagate(control, changes)
         nogoods: list[list[int]] | None = lp_checker.check()
+        if self.__show_lpassignment and (nogoods is None or len(nogoods) == 0):
+            lp_checker.compute_assignment()
         lp_checker.undo(changes)
         # ----------------------------------------------------------------------
         # Added and apply newly nogoods
@@ -118,9 +121,11 @@ class LpPropagator:
     # --------------------------------------------------------------------------
 
     def get_assignment(self: LpPropagator, thread_id: int) \
-            -> dict[str, tuple[list[float], list[tuple[str, float]]]]:
-        lp_checker: LpChecker = self.__checkers[thread_id]
-        return lp_checker.get_assignement()
+            -> dict[str, tuple[str, dict[str, float | None]]] | None:
+        if self.__show_lpassignment:
+            lp_checker: LpChecker = self.__checkers[thread_id]
+            return lp_checker.get_assignment()
+        return None
 
     def get_statistics(self: LpPropagator,
                        thread_id: int = -1) -> dict[str,
@@ -153,6 +158,9 @@ class LpPropagator:
     # --------------------------------------------------------------------------
     def lazy(self: LpPropagator, is_lazy: bool) -> None:
         self.__islazy = is_lazy
+
+    def show_lpassignment(self: LpPropagator, show: bool) -> None:
+        self.__show_lpassignment = show
 
     def strict_forall_check(self: LpPropagator, is_strict: bool) -> None:
         self.__isstrictforall = is_strict
@@ -375,6 +383,12 @@ class LpChecker:
     def get_statistics(self: LpChecker) -> tuple[float, list[Logger]]:
         return (self.preprocessing_time, self.lpsolver.get_statistics())
 
-    def get_assignement(self: LpChecker) \
-            -> dict[str, tuple[list[float], list[tuple[str, float]]]]:
-        raise NotImplementedError()
+    def get_assignment(self: LpChecker) \
+            -> dict[str, tuple[str, dict[str, float | None]]]:
+        assignments: dict[str, tuple[str, dict[str, float | None]]] = \
+            self.lpsolver.get_assignment()
+        self.lpsolver.reset_assignment()
+        return assignments
+
+    def compute_assignment(self: LpChecker) -> None:
+        self.lpsolver.optimize()

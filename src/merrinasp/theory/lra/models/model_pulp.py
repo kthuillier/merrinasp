@@ -38,7 +38,6 @@ from merrinasp.theory.lra.models.interface import (
 
 ExistsConstraint = tuple[LpAffineExpression, Sense, float]
 ForallConstraint = tuple[LpAffineExpression, Sense, float]
-Objective = tuple[LpAffineExpression, Sense, float]
 
 # ==============================================================================
 # Lp Models
@@ -56,7 +55,6 @@ class ModelPuLP(ModelInterface):
         # ----------------------------------------------------------------------
         self.constraints_exists: dict[int, ExistsConstraint] = {}
         self.constraints_forall: dict[int, ForallConstraint] = {}
-        self.objectives: dict[int, Objective] = {}
 
         # ----------------------------------------------------------------------
         # Lp solver interface
@@ -98,9 +96,9 @@ class ModelPuLP(ModelInterface):
     def _get_lpobjective(self: ModelPuLP) -> LpAffineExpression:
         return self.model.objective # type: ignore
 
-    def _add_lpobjective(self: ModelPuLP, expr: list[tuple[float, str]],
-                           direction: Sense = '>=') -> LpAffineExpression:
-        return self._get_lpexpression(expr, inverse=direction == '<=')
+    def _add_lpobjective(self: ModelPuLP,
+                         expr: list[tuple[float, str]]) -> LpAffineExpression:
+        return self._get_lpexpression(expr)
 
     def _set_lpobjective(self: ModelPuLP, objective: LpAffineExpression) \
             -> None:
@@ -108,13 +106,10 @@ class ModelPuLP(ModelInterface):
         self.__clear_unused_lpvariable()
 
     def _get_lpexpression(self: ModelPuLP,
-                           expr: list[tuple[float, str]],
-                           inverse: bool = False) -> LpAffineExpression:
+                          expr: list[tuple[float, str]]) -> LpAffineExpression:
         expression: LpAffineExpression = lpSum(
             coeff * self.variables[var] for coeff, var in expr
         )
-        if inverse:
-            return -expression
         return expression
 
     def _add_lpconstraint(self: ModelPuLP, cid: int) -> LpConstraint:
