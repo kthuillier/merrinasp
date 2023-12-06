@@ -15,7 +15,8 @@ from merrinasp.theory.lra.models import (
     ModelInterface,
     ModelOptlang,
     ModelGurobiPy,
-    ModelPuLP
+    ModelPuLP,
+    ModelGLPK
 )
 from merrinasp.theory.language import (
     LpConstraint,
@@ -41,16 +42,25 @@ class LpSolver:
         self.lpsolver_interface: type[ModelInterface] = ModelPuLP
         if self.lpsolver == 'cbc':
             self.lpsolver_interface = ModelPuLP
+        elif self.lpsolver == 'glpk':
+            self.lpsolver_interface = ModelGLPK
+        elif self.lpsolver == 'glpk-optlang':
+            self.lpsolver = 'glpk'
+            self.lpsolver_interface = ModelOptlang
         elif self.lpsolver == 'cplex-pulp':
             self.lpsolver = 'cplex'
             self.lpsolver_interface = ModelPuLP
-        elif self.lpsolver == 'glpk':
-            self.lpsolver_interface = ModelOptlang
         elif self.lpsolver == 'cplex-optlang':
             self.lpsolver = 'cplex'
             self.lpsolver_interface = ModelOptlang
         elif self.lpsolver == 'gurobi':
             self.lpsolver_interface = ModelGurobiPy
+        elif self.lpsolver == 'gurobi-pulp':
+            self.lpsolver = 'gurobi'
+            self.lpsolver_interface = ModelPuLP
+        elif self.lpsolver == 'gurobi-optlang':
+            self.lpsolver = 'gurobi'
+            self.lpsolver_interface = ModelOptlang
         else:
             print(f'Warning: unknown LP solver {self.lpsolver}.')
             print('Set to default value "cbc".')
