@@ -402,7 +402,6 @@ class ModelInterface:
                 if is_meaningfull:
                     self.remove([up_cid])
                     break
-                print(up_cid, up_constraint)
                 to_remove_constraints.append(self.constraints[up_cid])
                 self.description_complement.append(up_description)
                 del self.description[up_cid]
