@@ -48,8 +48,6 @@ To avoid syntax clashes, you must quote `"` real numbers. Instead of `0.5` write
 
 ***Note 2:*** All linear constraints should be in the head of the ASP rules.
 
-***Note 3:*** `&minimize` and `&maximize` are currently not handled. It will be done in a future update.
-
 ## Usage
 
 `merrinasp` supports all `clingo` options.
@@ -60,7 +58,7 @@ usage: merrinasp [number] [options] [files]
 Options:
   --lp-solver=<arg>: Set LP solver
    <arg>: { gurobi, cbc, glpk, cplex-optlang, cplex-pulp } (default lp-solver=cbc)
-  --[no-]show-opt-solution: Show LP solution and value of objective function
+  --[no-]show-lp-assignment: Show LP solution and the LP solver status for each partition of linear constraints
   --[no-]lazy-mode: Check the satisfiability of linear constraints at the end of the resolution process
   --[no-]strict-forall: Force the linear domains of forall constraints to be satisfiable
 ```
@@ -82,6 +80,11 @@ Some test examples are provided in the folder `./examples`:
     Run with:
     ```sh
     merrinasp -n 0 ./examples/test.lp
+    ```
+- `./examples/test-show.lp`: a small problem subdivided into 2 quantified linear problems for which optimum LP variable assignment should be displayed.\
+    Run with:
+    ```sh
+    merrinasp -n 0 ./examples/test-show.lp --show-lp-assignment
     ```
 - `./examples/merrin/`: inferring regulatory rules from a set of observed time series.\
     Run with:
