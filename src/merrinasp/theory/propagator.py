@@ -121,7 +121,7 @@ class LpPropagator:
     # --------------------------------------------------------------------------
 
     def get_assignment(self: LpPropagator, thread_id: int) \
-            -> dict[str, tuple[str, dict[str, float | None]]] | None:
+            -> dict[str, tuple[str, None | dict[str, float | None]]] | None:
         if self.__show_lpassignment:
             lp_checker: LpChecker = self.__checkers[thread_id]
             return lp_checker.get_assignment()
@@ -384,8 +384,8 @@ class LpChecker:
         return (self.preprocessing_time, self.lpsolver.get_statistics())
 
     def get_assignment(self: LpChecker) \
-            -> dict[str, tuple[str, dict[str, float | None]]]:
-        assignments: dict[str, tuple[str, dict[str, float | None]]] = \
+            -> dict[str,tuple[str, None | dict[str, float | None]]]:
+        assignments: dict[str, tuple[str, None | dict[str, float | None]]] = \
             self.lpsolver.get_assignment()
         self.lpsolver.reset_assignment()
         return assignments

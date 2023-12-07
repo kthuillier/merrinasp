@@ -54,8 +54,8 @@ class Application:
                     f"   <arg>: {{ {', '.join(AVAILABLE_LPSOLVERS)} }} (default lp-solver=cbc)",
                     self.parse_lp_solver_option)
 
-        options.add_flag(group, "show-opt-solution",
-                         "Show LP solution and value of objective function",
+        options.add_flag(group, "show-lp-assignment",
+                         "Show LP solution and the LP solver status for each partition of linear constraints",
                          self.show_lpassignments_flag)
 
         options.add_flag(group, "lazy-mode",
@@ -112,32 +112,24 @@ class Application:
         ))
         if self.show_lpassignments_flag.flag:
             assignments = self.propagator.get_assignment(model.thread_id)
-            print(assignments)
-        # if self.show_lpassignments_flag.flag:
-        #     assignments = self.propagator.get_assignment(model.thread_id)
-        #     print('LP Solutions:')
-        #     for pid in sorted(assignments.keys()):
-        #         pid: str
-        #         align: int = 4
-        #         pid_assignment, pid_optimum = assignments[pid]
-        #         pid_optimum_str: list[str] = [str(opt) for opt in pid_optimum]
-        #         if len(assignments) != 1:
-        #             print(' ' * align + f'PID {pid}:')
-        #             align += 4
-        #         # Status + Optimum
-        #         if len(pid_optimum) != 0:
-        #             print(
-        #                 ' ' * align + f'Optimums: {"; ".join(pid_optimum_str)}'
-        #             )
-        #         is_unbounded: bool = float('inf') in pid_optimum or \
-        #             float('-inf') in pid_optimum
-        #         # Variables
-        #         if len(pid_optimum) == 0 or not is_unbounded:
-        #             variables_str: str = '; '.join(
-        #                 f'{var_name} = {var_value}'
-        #                 for var_name, var_value in sorted(pid_assignment)
-        #             )
-        #             print(' ' * align + f'{{ {variables_str} }}')
+            assert assignments is not None
+            print('LP Assignment:')
+            if 'pid(default)' in assignments:
+                status, assignment = assignments['pid(default)']
+                print(f'Default: {status}')
+                if assignment is not None:
+                    print(' '.join(
+                        f'{var}={value}' for var, value in assignment.items()
+                    ))
+            for pid in sorted(assignments.keys()):
+                if pid == 'pid(default)':
+                    continue
+                status, assignment = assignments[pid]
+                print(f'{pid}: {status}')
+                if assignment is not None:
+                    print(' '.join(
+                        f'{var}={value}' for var, value in assignment.items()
+                    ))
 
     def __on_statistics(self: Application, _: StatisticsMap,
                         acc: StatisticsMap) -> None:

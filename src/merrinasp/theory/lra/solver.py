@@ -33,12 +33,45 @@ class LpSolver:
 
     def __init__(self: LpSolver, init: PropagateInit,
                  lpsolver: str = 'cbc', strict_forall: bool = True) -> None:
+        self.preprocessing_time: float = time()
         # ----------------------------------------------------------------------
         # Select LpSolver
         # ----------------------------------------------------------------------
+        self.__init_lpsolver(lpsolver, strict_forall)
+
+        # ----------------------------------------------------------------------
+        # Database - Lp Models
+        # ----------------------------------------------------------------------
+        self.models: dict[str, ModelInterface] = {}
+        self.models_forall: dict[str, list[int]] = {}
+
+        # ----------------------------------------------------------------------
+        # Database - LP constraints
+        # ----------------------------------------------------------------------
+        self.pids: dict[str, list[int]] = {}
+        self.cids_guessed: dict[int, bool] = {}
+        self.cids_propagated: dict[int, bool] = {}
+        self.cids_constraints: dict[int, ParsedLpConstraint] = {}
+        self.cids_grounded_constraints: \
+            dict[int, list[tuple[LpConstraint, tuple[int, ...]]]] = {}
+
+        # ----------------------------------------------------------------------
+        # Initialize internal memory
+        # ----------------------------------------------------------------------
+        self.__init_memory(init)
+
+        # ----------------------------------------------------------------------
+        # Assignment
+        # ----------------------------------------------------------------------
+        self.assignments: dict[str,
+                               tuple[str, None | dict[str, float | None]]] = {}
+
+        self.preprocessing_time = time() - self.preprocessing_time
+
+    def __init_lpsolver(self: LpSolver, lpsolver: str,
+                        strict_forall: bool) -> None:
         self.strict_forall: bool = strict_forall
         self.lpsolver: str = lpsolver
-
         self.lpsolver_interface: type[ModelInterface] = ModelPuLP
         if self.lpsolver == 'cbc':
             self.lpsolver_interface = ModelPuLP
@@ -65,26 +98,7 @@ class LpSolver:
             print(f'Warning: unknown LP solver {self.lpsolver}.')
             print('Set to default value "cbc".')
 
-        # ----------------------------------------------------------------------
-        # Database - Lp Models
-        # ----------------------------------------------------------------------
-        self.models: dict[str, ModelInterface] = {}
-        self.models_forall: dict[str, list[int]] = {}
-
-        # ----------------------------------------------------------------------
-        # Database - LP constraints
-        # ----------------------------------------------------------------------
-        self.pids: dict[str, list[int]] = {}
-        self.cids_guessed: dict[int, bool] = {}
-        self.cids_propagated: dict[int, bool] = {}
-        self.cids_constraints: dict[int, ParsedLpConstraint] = {}
-        self.cids_grounded_constraints: \
-            dict[int, list[tuple[LpConstraint, tuple[int, ...]]]] = {}
-
-        # ----------------------------------------------------------------------
-        # Initialize internal memory
-        # ----------------------------------------------------------------------
-        self.preprocessing_time: float = time()
+    def __init_memory(self: LpSolver, init: PropagateInit) -> None:
         for atom in init.theory_atoms:
             pid: str = str(atom.term.arguments[0])
             cid: int = atom.literal
@@ -100,13 +114,6 @@ class LpSolver:
                 self.cids_constraints[-cid] = constraints[1]
                 if constraints[1][0] == 'forall':
                     self.models_forall.setdefault(pid, []).append(-cid)
-
-        # ----------------------------------------------------------------------
-        # Assignment
-        # ----------------------------------------------------------------------
-        self.assignments: dict[str,
-                               tuple[str, None | dict[str, float | None]]] = {}
-        self.preprocessing_time = time() - self.preprocessing_time
 
     # ==========================================================================
     # LP problem builders
@@ -261,8 +268,17 @@ class LpSolver:
     def get_constraints(self: LpSolver, pid: str,
                         only_propagated: bool = False) -> list[int]:
         if only_propagated:
-            return [cid for cid in self.pids[pid] if self.cids_propagated[cid]]
-        return self.pids[pid]
+            return [
+                cid
+                for cid in self.pids[pid]
+                if self.cids_propagated[cid]
+                and -cid not in self.models_forall[pid]
+            ]
+        return [
+            cid
+            for cid in self.pids[pid]
+            if -cid not in self.models_forall[pid]
+        ]
 
     def get_statistics(self: LpSolver,
                        pid: str | None = None) -> list[Logger]:

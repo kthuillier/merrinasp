@@ -222,7 +222,8 @@ class ModelInterface:
         # Iterate over the set of optimization and fix the output
         # ----------------------------------------------------------------------
         to_remove_constraints: list[int] = []
-        for weight, expr in merged_objectives.items():
+        for weight in sorted(merged_objectives.keys()):
+            expr = merged_objectives[weight]
             ocid: int = weighted_cid[weight]
             # ------------------------------------------------------------------
             # Set the objective function
@@ -402,6 +403,7 @@ class ModelInterface:
                 if is_meaningfull:
                     self.remove([up_cid])
                     break
+                print(up_cid, up_constraint)
                 to_remove_constraints.append(self.constraints[up_cid])
                 self.description_complement.append(up_description)
                 del self.description[up_cid]
