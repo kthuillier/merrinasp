@@ -95,7 +95,7 @@ class ModelOptlang(ModelInterface):
         self.model.objective = objective
 
     def _get_lpexpression(self: ModelOptlang,
-                           expr: list[tuple[float, str]]) -> Any:
+                          expr: list[tuple[float, str]]) -> Any:
         expression: Any = sum(
             coeff * self.variables[var] for coeff, var in expr  # type: ignore
         )
@@ -116,7 +116,7 @@ class ModelOptlang(ModelInterface):
         return lpconstraint
 
     def _remove_lpconstraint(self: ModelOptlang,
-                              constraint: interface.Constraint) -> None:
+                             constraint: interface.Constraint) -> None:
         self.model.remove(constraint)
 
     def _lpsolve(self: ModelOptlang) -> tuple[LpStatus, float | None]:

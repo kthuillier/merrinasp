@@ -50,7 +50,7 @@ class Application:
                          options: ApplicationOptions) -> None:
         group: str = 'MerrinASP Options'
         options.add(group, "lp-solver",
-                    "Set LP solver\n" + \
+                    "Set LP solver\n" +
                     f"   <arg>: {{ {', '.join(AVAILABLE_LPSOLVERS)} }} (default lp-solver=cbc)",
                     self.parse_lp_solver_option)
 

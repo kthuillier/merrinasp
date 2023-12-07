@@ -218,8 +218,8 @@ class LpSolver:
                     pid,
                     only_propagated=True
                 )
-                unprop_cids: dict[int, list[tuple[LpConstraint, \
-                        tuple[int, ...]]]] = {
+                unprop_cids: dict[int, list[tuple[LpConstraint,
+                                                  tuple[int, ...]]]] = {
                     cid: self.__ground_lpconstraints(cid)
                     for cid in self.get_constraints(pid)
                     if cid not in prop_cids
@@ -309,12 +309,12 @@ class LpSolver:
     # ==========================================================================
 
     def __ground_lpconstraints(self: LpSolver, cid: int) \
-                                -> list[tuple[LpConstraint, tuple[int, ...]]]:
+            -> list[tuple[LpConstraint, tuple[int, ...]]]:
         # ----------------------------------------------------------------------
         # Recursive function yielding list of list of grounded LpConstraint
         # ----------------------------------------------------------------------
         def partition(condids: list[int]) \
-            -> Generator[list[list[int]], None, None]:
+                -> Generator[list[list[int]], None, None]:
             if len(condids) == 1:
                 yield [condids]
                 return

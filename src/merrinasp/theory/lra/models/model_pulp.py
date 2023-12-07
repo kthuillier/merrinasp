@@ -7,7 +7,7 @@
 from __future__ import annotations
 import sys
 
-from pulp import ( #type: ignore
+from pulp import (  # type: ignore
     LpAffineExpression,
     LpProblem,
     LpConstraint,
@@ -94,7 +94,7 @@ class ModelPuLP(ModelInterface):
         return lpvar
 
     def _get_lpobjective(self: ModelPuLP) -> LpAffineExpression:
-        return self.model.objective # type: ignore
+        return self.model.objective  # type: ignore
 
     def _add_lpobjective(self: ModelPuLP,
                          expr: list[tuple[float, str]]) -> LpAffineExpression:
@@ -129,13 +129,14 @@ class ModelPuLP(ModelInterface):
         return lpconstraint
 
     def _remove_lpconstraint(self: ModelPuLP,
-                              constraint: LpConstraint) -> None:
+                             constraint: LpConstraint) -> None:
         del self.model.constraints[constraint.name]
         self.__clear_unused_lpvariable()
 
     def _lpsolve(self: ModelPuLP) -> tuple[LpStatus, float | None]:
         status: LpStatus = \
-            PulpStatus[self.model.solve(self.interface)].lower()  # type: ignore
+            PulpStatus[self.model.solve(
+                self.interface)].lower()  # type: ignore
         if status == 'optimal' and self.model.objective is not None:
             return status, value(self.model.objective)  # type: ignore
         return status, None
@@ -159,7 +160,7 @@ class ModelPuLP(ModelInterface):
                 for var in expression:
                     used_vars.add(var['name'])
             if self.model.objective is not None:
-                expression = self.model.objective.toDict() #type: ignore
+                expression = self.model.objective.toDict()  # type: ignore
                 for var in expression:
                     used_vars.add(var['name'])
             return used_vars

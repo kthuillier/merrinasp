@@ -57,7 +57,6 @@ from swiglpk import (  # type: ignore
 )
 
 
-
 from merrinasp.theory.lra.models.interface import (
     ModelInterface,
     Sense,
@@ -115,7 +114,8 @@ class ModelGLPK(ModelInterface):
         glp_add_cols(self.model, 1)
         index = glp_get_num_cols(self.model)
         glp_set_col_name(self.model, index, varname)
-        glp_set_col_bnds(self.model, index, GLP_FR, float('-inf'), float('inf'))
+        glp_set_col_bnds(self.model, index, GLP_FR,
+                         float('-inf'), float('inf'))
         glp_set_col_kind(self.model, index, GLP_CV)
         return index
 
@@ -129,7 +129,7 @@ class ModelGLPK(ModelInterface):
 
     def _add_lpobjective(self: ModelGLPK,
                          expr: list[tuple[float, str]]) \
-                            -> list[tuple[float, str]]:
+            -> list[tuple[float, str]]:
         return self._get_lpexpression(expr)
 
     def _set_lpobjective(self: ModelGLPK, objective: list[tuple[float, str]]) \
@@ -142,8 +142,8 @@ class ModelGLPK(ModelInterface):
         self.__clear_unused_lpvariable()
 
     def _get_lpexpression(self: ModelGLPK,
-                           expr: list[tuple[float, str]]) \
-                               -> list[tuple[float, str]]:
+                          expr: list[tuple[float, str]]) \
+            -> list[tuple[float, str]]:
         return expr
 
     def _add_lpconstraint(self: ModelGLPK, cid: int) -> str:
@@ -203,7 +203,7 @@ class ModelGLPK(ModelInterface):
     # ==========================================================================
 
     def __clear_unused_lpvariable(self: ModelGLPK) -> None:
-        # TODO: remove unused variables, i.e. variables associated with
+        #  TODO: remove unused variables, i.e. variables associated with
         # zeros columns
         pass
 
@@ -226,16 +226,16 @@ class ModelGLPK(ModelInterface):
     def __switch_rows(self: ModelGLPK, i: int, j: int) -> None:
         if i == j:
             return
-        # ----------------------------------------------------------------------
-        # Switch names
-        # ----------------------------------------------------------------------
+        #  ----------------------------------------------------------------------
+        #  Switch names
+        #  ----------------------------------------------------------------------
         i_name: str = glp_get_row_name(self.model, i)
         j_name: str = glp_get_row_name(self.model, j)
         glp_set_row_name(self.model, i, j_name)
         glp_set_row_name(self.model, j, i_name)
-        # ----------------------------------------------------------------------
+        #  ----------------------------------------------------------------------
         # Switch bounds
-        # ----------------------------------------------------------------------
+        #  ----------------------------------------------------------------------
         i_type: Any = glp_get_row_type(self.model, i)
         i_lb: float = glp_get_row_lb(self.model, i)
         i_ub: float = glp_get_row_ub(self.model, i)
@@ -244,9 +244,9 @@ class ModelGLPK(ModelInterface):
         j_ub: float = glp_get_row_ub(self.model, j)
         glp_set_row_bnds(self.model, i, j_type, j_lb, j_ub)
         glp_set_row_bnds(self.model, j, i_type, i_lb, i_ub)
-        # ----------------------------------------------------------------------
+        #  ----------------------------------------------------------------------
         # Switch coefficients
-        # ----------------------------------------------------------------------
+        #  ----------------------------------------------------------------------
         num_cols: int = glp_get_num_cols(self.model)
         i_index_array: intArray = intArray(num_cols + 1)
         j_index_array: intArray = intArray(num_cols + 1)

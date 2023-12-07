@@ -37,7 +37,7 @@ class Logger:
             )
         }
         statistics['LP Solver'] = {
-           'Modifications': {
+            'Modifications': {
                 'Updates (s)': sum(
                     sum(logger.model_updates) for logger in loggers
                 ),
@@ -45,7 +45,7 @@ class Logger:
                     sum(logger.model_backtracks) for logger in loggers
                 )
             },
-           'Solving': {
+            'Solving': {
                 'Calls': sum(
                     len(logger.lpsolver_calls) for logger in loggers
                 ),

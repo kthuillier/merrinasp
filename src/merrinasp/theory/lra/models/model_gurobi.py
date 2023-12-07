@@ -77,7 +77,7 @@ class ModelGurobiPy(ModelInterface):
         self.model.setObjective(objective, sense=GRB.MINIMIZE)
 
     def _get_lpexpression(self: ModelGurobiPy,
-                           expr: list[tuple[float, str]]) -> LinExpr:
+                          expr: list[tuple[float, str]]) -> LinExpr:
         expression: LinExpr = sum(
             coeff * self.variables[var] for coeff, var in expr  # type: ignore
         )

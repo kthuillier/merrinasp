@@ -127,7 +127,6 @@ class ModelInterface:
             )
         self.logger.model_updates.append(time() - dt)
 
-
     def remove(self: ModelInterface, cids: list[int]) -> None:
         for cid in cids:
             dt: float = time()
@@ -296,7 +295,7 @@ class ModelInterface:
 
     def __merge_exprs(self: ModelInterface,
                       exprs: list[list[tuple[float, str]]]) \
-                          -> list[tuple[float, str]]:
+            -> list[tuple[float, str]]:
         merged_expr: dict[str, float] = {}
         for expr in exprs:
             for coeff, var in expr:
@@ -347,9 +346,9 @@ class ModelInterface:
         return conflicting_cids
 
     def core_unsat_forall(self: ModelInterface, conflict: int,
-                          unprop_cids: dict[int, list[tuple[LpConstraint, \
-                              tuple[int, ...]]]], lazy: bool = False) \
-                                  -> list[int]:
+                          unprop_cids: dict[int, list[tuple[LpConstraint,
+                                                            tuple[int, ...]]]], lazy: bool = False) \
+            -> list[int]:
         self.logger.conflicts_forall += 1
         # ----------------------------------------------------------------------
         # If Lazy: do not compute the optimum core
