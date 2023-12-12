@@ -29,8 +29,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/kthuillier/ClingOPT"
-Repository = "https://github.com/kthuillier/ClingOPT/issues"
+Homepage = "https://github.com/kthuillier/merrinasp"
+Repository = "https://github.com/kthuillier/merrinasp/issues"
 
 [project.scripts]
 merrinasp = "merrinasp.app:main"

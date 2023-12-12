@@ -16,7 +16,7 @@ pip install .
 
 Install via pip:
 ```sh
-pip install git+https://github.com/kthuillier/ClingOPT
+pip install git+https://github.com/kthuillier/merrinasp
 ```
 
 ## Linear Programming Solver
