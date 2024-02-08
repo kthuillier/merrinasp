@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from gurobipy import Model, LinExpr, Constr, Var, GRB
+from gurobipy import Model, LinExpr, Constr, Var, GRB, Env
 
 from merrinasp.theory.lra.models.interface import (
     ModelInterface,
@@ -52,9 +52,16 @@ class ModelGurobiPy(ModelInterface):
     # ==========================================================================
 
     def _lpinit(self: ModelGurobiPy, pid: str) -> Model:
-        model: Model = Model(f'PID_{pid}')
-        model.setParam('OutputFlag', 0)
-        model.setParam('DualReductions', 0)
+        # ~ Remove all automated logs message when calling Gurobi solver
+        ENV: Env = Env(empty=True)
+        ENV.setParam("OutputFlag", 0)
+        ENV.setParam("LogToConsole", 0)
+        ENV.start()
+        # ~ Init model
+        model: Model = Model(f'PID_{pid}', env = ENV)
+        model.setParam(GRB.Param.OutputFlag, 0)
+        model.setParam(GRB.Param.LogToConsole, 0)
+        model.setParam(GRB.Param.DualReductions, 0)
         return model
 
     def _add_lpvariable(self: ModelGurobiPy, varname: str) -> Var:

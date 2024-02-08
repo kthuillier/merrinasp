@@ -13,7 +13,6 @@ from clingo import PropagateInit
 from merrinasp.theory.lra.logger import Logger
 from merrinasp.theory.lra.models import (
     ModelInterface,
-    ModelOptlang,
     ModelGurobiPy,
     ModelPuLP,
     ModelGLPK
@@ -79,12 +78,14 @@ class LpSolver:
             self.lpsolver_interface = ModelGLPK
         elif self.lpsolver == 'glpk-optlang':
             self.lpsolver = 'glpk'
+            from merrinasp.theory.lra.models.model_optlang import ModelOptlang
             self.lpsolver_interface = ModelOptlang
         elif self.lpsolver == 'cplex-pulp':
             self.lpsolver = 'cplex'
             self.lpsolver_interface = ModelPuLP
         elif self.lpsolver == 'cplex-optlang':
             self.lpsolver = 'cplex'
+            from merrinasp.theory.lra.models.model_optlang import ModelOptlang
             self.lpsolver_interface = ModelOptlang
         elif self.lpsolver == 'gurobi':
             self.lpsolver_interface = ModelGurobiPy
@@ -93,6 +94,7 @@ class LpSolver:
             self.lpsolver_interface = ModelPuLP
         elif self.lpsolver == 'gurobi-optlang':
             self.lpsolver = 'gurobi'
+            from merrinasp.theory.lra.models.model_optlang import ModelOptlang
             self.lpsolver_interface = ModelOptlang
         else:
             print(f'Warning: unknown LP solver {self.lpsolver}.')

@@ -53,7 +53,9 @@ from swiglpk import (  # type: ignore
     glp_get_row_lb,
     glp_get_row_name,
     glp_get_obj_coef,
-    glp_adv_basis
+    glp_adv_basis,
+    glp_scale_prob,
+    GLP_SF_AUTO
 )
 
 
@@ -69,6 +71,12 @@ from merrinasp.theory.lra.models.interface import (
 
 ExistsConstraint = tuple[list[tuple[float, str]], Sense, float]
 ForallConstraint = tuple[list[tuple[float, str]], Sense, float]
+
+# ==============================================================================
+# Globals
+# ==============================================================================
+
+INFINITY: float = 10*9
 
 # ==============================================================================
 # Lp Models
@@ -114,8 +122,7 @@ class ModelGLPK(ModelInterface):
         glp_add_cols(self.model, 1)
         index = glp_get_num_cols(self.model)
         glp_set_col_name(self.model, index, varname)
-        glp_set_col_bnds(self.model, index, GLP_FR,
-                         float('-inf'), float('inf'))
+        glp_set_col_bnds(self.model, index, GLP_FR, 0., 0.)
         glp_set_col_kind(self.model, index, GLP_CV)
         return index
 
@@ -173,18 +180,28 @@ class ModelGLPK(ModelInterface):
 
         return consname
 
+    # def _remove_lpconstraint(self: ModelGLPK, constraint: str) -> None:
+    #     index: int = glp_find_row(self.model, constraint)
+    #     if index == 0:
+    #         return
+    #     last_index: int = glp_get_num_rows(self.model)
+    #     self.__switch_rows(index, last_index)
+    #     num = intArray(2)
+    #     num[1] = last_index
+    #     glp_del_rows(self.model, 1, num)
+    #     self.__clear_unused_lpvariable()
+
     def _remove_lpconstraint(self: ModelGLPK, constraint: str) -> None:
         index: int = glp_find_row(self.model, constraint)
         if index == 0:
             return
-        last_index: int = glp_get_num_rows(self.model)
-        self.__switch_rows(index, last_index)
         num = intArray(2)
-        num[1] = last_index
+        num[1] = index
         glp_del_rows(self.model, 1, num)
         self.__clear_unused_lpvariable()
 
     def _lpsolve(self: ModelGLPK) -> tuple[LpStatus, float | None]:
+        glp_scale_prob(self.model, GLP_SF_AUTO)
         status: LpStatus = self.__lpsolve_glpk()
         if status == 'undefined':
             glp_adv_basis(self.model, 0)
@@ -199,7 +216,7 @@ class ModelGLPK(ModelInterface):
         return glp_get_col_prim(self.model, varindex)
 
     # ==========================================================================
-    # Methods dedicated to the GUROBI solver
+    # Methods dedicated to the GLPK solver
     # ==========================================================================
 
     def __clear_unused_lpvariable(self: ModelGLPK) -> None:
