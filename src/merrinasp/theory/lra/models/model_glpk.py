@@ -261,9 +261,9 @@ class ModelGLPK(ModelInterface):
         j_ub: float = glp_get_row_ub(self.model, j)
         glp_set_row_bnds(self.model, i, j_type, j_lb, j_ub)
         glp_set_row_bnds(self.model, j, i_type, i_lb, i_ub)
-        #  ----------------------------------------------------------------------
+        # ----------------------------------------------------------------------
         # Switch coefficients
-        #  ----------------------------------------------------------------------
+        # ----------------------------------------------------------------------
         num_cols: int = glp_get_num_cols(self.model)
         i_index_array: intArray = intArray(num_cols + 1)
         j_index_array: intArray = intArray(num_cols + 1)

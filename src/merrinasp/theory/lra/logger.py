@@ -15,13 +15,19 @@ class Logger:
 
     def __init__(self: Logger, pid: str) -> None:
         self.id: str = pid
-        self.lpsolver_calls: list[float] = []
-        self.cache_prevented: list[float] = []
-        self.cache_missed: list[float] = []
+        self.lpsolver_calls_nb: int = 0
+        self.lpsolver_calls_sum: float = 0
+        self.cache_prevented_nb: int = 0
+        self.cache_prevented_sum: float = 0
+        self.cache_missed_nb: int = 0
+        self.cache_missed_sum: float = 0
+        self.cache_size: int = 0
         self.conflicts_exists: int = 0
         self.conflicts_forall: int = 0
-        self.model_updates: list[float] = []
-        self.model_backtracks: list[float] = []
+        self.model_updates_nb: int = 0
+        self.model_updates_sum: float = 0
+        self.model_backtracks_nb: int = 0
+        self.model_backtracks_sum: float = 0
 
     @classmethod
     def merge(cls: type[Logger],
@@ -39,29 +45,33 @@ class Logger:
         statistics['LP Solver'] = {
             'Modifications': {
                 'Updates (s)': sum(
-                    sum(logger.model_updates) for logger in loggers
+                    logger.model_updates_sum for logger in loggers
                 ),
                 'Backtracks (s)': sum(
-                    sum(logger.model_backtracks) for logger in loggers
+                    logger.model_backtracks_sum for logger in loggers
                 )
             },
             'Solving': {
                 'Calls': sum(
-                    len(logger.lpsolver_calls) for logger in loggers
+                    logger.lpsolver_calls_nb for logger in loggers
                 ),
                 'Time (s)': sum(
-                    sum(logger.lpsolver_calls) for logger in loggers
+                    logger.lpsolver_calls_sum for logger in loggers
                 )
             },
             'Lp Cache': {
                 'Cache guesses': sum(
-                    len(logger.cache_prevented) for logger in loggers
+                    logger.cache_prevented_nb for logger in loggers
                 ),
                 'Cache misses': sum(
-                    len(logger.cache_missed) for logger in loggers
+                    logger.cache_missed_nb for logger in loggers
                 ),
                 'Cost (s)': sum(
-                    sum(logger.cache_missed) + sum(logger.cache_prevented)
+                    logger.cache_missed_sum + logger.cache_prevented_sum
+                    for logger in loggers
+                ),
+                'Size': sum(
+                    logger.cache_size
                     for logger in loggers
                 )
             }

@@ -12,6 +12,7 @@ import sys
 from merrinasp.theory.language import LpConstraint
 from merrinasp.theory.lra.logger import Logger
 from merrinasp.theory.lra.cache import LpCache
+from merrinasp.theory.lra.better_cache import BetterLpCache
 
 # ==============================================================================
 # Type Alias
@@ -56,7 +57,6 @@ class ModelInterface:
         self.description: dict[int, tuple[int, ...]] = {}
         self.description_db: dict[int, tuple[int, ...]] = {}
         self.description_complement: list[tuple[int, ...]] = []
-        self.added_order: list[int] = []
 
         # ----------------------------------------------------------------------
         # Problem structure
@@ -104,7 +104,6 @@ class ModelInterface:
                 b
             )
             self.constraints[cid] = self._add_lpconstraint(cid)
-            self.added_order.append(cid)
         elif constraint_type == 'forall':
             assert cid not in self.constraints_forall
             if sense == '<=':
@@ -125,7 +124,8 @@ class ModelInterface:
                 '>=',
                 b
             )
-        self.logger.model_updates.append(time() - dt)
+        self.logger.model_updates_nb += 1
+        self.logger.model_updates_sum += time() - dt
 
     def remove(self: ModelInterface, cids: list[int]) -> None:
         for cid in cids:
@@ -135,7 +135,6 @@ class ModelInterface:
                 del self.description[cid]
                 del self.constraints_exists[cid]
                 del self.constraints[cid]
-                self.added_order.remove(cid)
             elif cid in self.constraints_forall:
                 del self.description_db[cid]
                 del self.constraints_forall[cid]
@@ -144,51 +143,128 @@ class ModelInterface:
                 del self.objectives[cid]
             else:
                 assert False
-            self.logger.model_backtracks.append(time() - dt)
+            self.logger.model_backtracks_nb += 1
+            self.logger.model_backtracks_sum += time() - dt
+
+# ==========================================================================
+    # Cache
+    # ==========================================================================
+    def __cache_check(self: ModelInterface, objective: Any) \
+            -> None | bool:
+        dt: float = time()
+        cache_check: None | bool = self.cache.check(
+            list(self.description.values()) + self.description_complement,
+            tuple(sorted(objective)) if objective is not None else None
+        )
+        if cache_check is not None:
+            self.logger.cache_prevented_nb += 1
+            self.logger.cache_prevented_sum += time() - dt
+            return cache_check
+        self.logger.cache_missed_nb += 1
+        self.logger.cache_missed_sum += time() - dt
+        return None
+
+    def __cache_add(self: ModelInterface, objective: Any, issat: bool) -> None:
+        self.cache.add(
+            list(self.description.values()) + self.description_complement,
+            tuple(sorted(objective)) if objective is not None else None,
+            issat
+        )
+        self.logger.cache_size = self.cache.get_size()
+
+    def __lpsolve(self: ModelInterface) -> tuple[LpStatus, float | None]:
+        # ----------------------------------------------------------------------
+        # SOLVER: solve the problem
+        # ----------------------------------------------------------------------
+        # Statuses:
+        # 'optimal': 'An optimal solution as been found.'
+        # 'infeasible': 'The problem has no feasible solutions.'
+        # 'unbounded': 'The objective can be optimized infinitely.'
+        # 'undefined': 'The solver determined that the problem is ill-formed.'
+        dt = time()
+        status, optimum = self._lpsolve()
+        self.logger.lpsolver_calls_nb += 1
+        self.logger.lpsolver_calls_sum += time() - dt
+        return status, optimum
 
     # ==========================================================================
     # Solving
     # ==========================================================================
     def check_exists(self: ModelInterface) -> bool:
-        status, _ = self.__solve()
-        return status in ('optimal', 'unbounded')
+        # ----------------------------------------------------------------------
+        # Check if it is already solved
+        # ----------------------------------------------------------------------
+        cache_check: None | bool = self.__cache_check(None)
+        if cache_check is not None:
+            return cache_check
+        # ----------------------------------------------------------------------
+        # Solve
+        # ----------------------------------------------------------------------
+        status, _ = self.__lpsolve()
+        issat: bool = status in ('optimal', 'unbounded')
+        # ----------------------------------------------------------------------
+        # Update Cache
+        # ----------------------------------------------------------------------
+        self.__cache_add(None, issat)
+        return issat
+
+    def __solve_objective(self:ModelInterface, objective: Any) \
+            -> tuple[LpStatus, float | None]:
+        # ----------------------------------------------------------------------
+        # Add new objective
+        # ----------------------------------------------------------------------
+        self._set_lpobjective(objective)
+        # ----------------------------------------------------------------------
+        # Compute optimum
+        # ----------------------------------------------------------------------
+        status, optimum = self.__lpsolve()
+        # ----------------------------------------------------------------------
+        # Remove current objective
+        # ----------------------------------------------------------------------
+        self._set_lpobjective(self.default_objective)
+        return status, optimum
+
+    def __valid_forall(self:ModelInterface, cid: int) \
+            -> bool:
+        # ----------------------------------------------------------------------
+        # Check if it is already solved
+        # ----------------------------------------------------------------------
+        cache_check: None | bool = self.__cache_check(
+            self.description_db[cid]
+        )
+        if cache_check is not None:
+            return cache_check
+        # ----------------------------------------------------------------------
+        # Solve
+        # ----------------------------------------------------------------------
+        objective, sense, b = self.constraints_forall[cid]
+        assert sense == '>='
+        status, optimum = self.__solve_objective(objective)
+        # ----------------------------------------------------------------------
+        # Split the different cases and update Cache
+        # ----------------------------------------------------------------------
+        issat: bool
+        if status == 'optimal':
+            assert optimum is not None
+            issat = optimum >= b - self.epsilon
+            self.__cache_add(None, True)
+        elif status == 'infeasible':
+            issat = True
+            self.__cache_add(None, False)
+        elif status == 'unbounded':
+            issat = False
+            self.__cache_add(None, True)
+        else:
+            print('Error: Unknown LP solver status:', status)
+            sys.exit(0)
+        self.__cache_add(self.description_db[cid], issat)
+        return issat
 
     def check_forall(self: ModelInterface) -> list[int]:
         conflicts: list[int] = []
-        for cid, lpcons in self.constraints_forall.items():
-            # ------------------------------------------------------------------
-            # Add new objective
-            # ------------------------------------------------------------------
-            objective, sense, b = lpcons
-            self._set_lpobjective(objective)
-            self.description[cid] = self.description_db[cid]
-            # ------------------------------------------------------------------
-            # Compute optimum
-            # ------------------------------------------------------------------
-            status, optimum = self.__solve()
-            # ------------------------------------------------------------------
-            # Split status
-            # ------------------------------------------------------------------
-            if status == 'optimal':
-                assert optimum is not None
-                if (sense == '>=' and not optimum >= b - self.epsilon) \
-                        or (sense == '<=' and not optimum <= b + self.epsilon):
-                    conflicts.append(cid)
-            elif status == 'infeasible':
-                # If one problem is infeasible, then all are
-                self._set_lpobjective(self.default_objective)
-                del self.description[cid]
-                break
-            elif status == 'unbounded':
+        for cid in self.constraints_forall:
+            if not self.__valid_forall(cid):
                 conflicts.append(cid)
-            else:
-                print('Error: Unknown LP solver status:', status)
-                sys.exit(0)
-            # ------------------------------------------------------------------
-            # Remove current objective
-            # ------------------------------------------------------------------
-            self._set_lpobjective(self.default_objective)
-            del self.description[cid]
         return conflicts
 
     def optimize(self: ModelInterface) \
@@ -234,7 +310,8 @@ class ModelInterface:
             dt = time()
             status, optimum = self._lpsolve()
             dt = time() - dt
-            self.logger.lpsolver_calls.append(dt)
+            self.logger.lpsolver_calls_nb += 1
+            self.logger.lpsolver_calls_sum += dt
             if status != 'optimal':
                 break
             assert optimum is not None
@@ -259,39 +336,6 @@ class ModelInterface:
         self.remove(to_remove_constraints)
         self._set_lpobjective(self.default_objective)
         return status, assignment
-
-    def __solve(self: ModelInterface) -> tuple[LpStatus, float | None]:
-        # ----------------------------------------------------------------------
-        # CACHE: check if the problem has already been solved
-        # ----------------------------------------------------------------------
-        dt: float = time()
-        cache_check: None | tuple[str, float | None] = self.cache.check(
-            list(self.description.values()) + self.description_complement
-        )
-        if cache_check is not None:
-            dt = time() - dt
-            self.logger.cache_prevented.append(dt)
-            return cache_check  # type: ignore
-        dt = time() - dt
-        self.logger.cache_missed.append(dt)
-        # ----------------------------------------------------------------------
-        # SOLVER: solve the problem
-        # ----------------------------------------------------------------------
-        # Statuses:
-        # 'optimal': 'An optimal solution as been found.'
-        # 'infeasible': 'The problem has no feasible solutions.'
-        # 'unbounded': 'The objective can be optimized infinitely.'
-        # 'undefined': 'The solver determined that the problem is ill-formed.'
-        dt = time()
-        status, optimum = self._lpsolve()
-        self.cache.add(
-            list(self.description.values()) + self.description_complement,
-            status,
-            optimum
-        )
-        dt = time() - dt
-        self.logger.lpsolver_calls.append(dt)
-        return status, optimum
 
     def __merge_exprs(self: ModelInterface,
                       exprs: list[list[tuple[float, str]]]) \
@@ -328,16 +372,20 @@ class ModelInterface:
             # ------------------------------------------------------------------
             # Check the satisfiability
             # ------------------------------------------------------------------
-            if self.check_exists():
+            status, _ = self.__lpsolve()
+            issat: bool = status in ('optimal', 'unbounded')
+            if issat:
+                self.__cache_add(None, True)
                 conflicting_cids.append(abs(cid))
                 self.constraints[cid] = self._add_lpconstraint(cid)
                 self.description[cid] = removed_description[cid]
                 del removed_description[cid]
             else:
                 removed_constraints.append(cid)
-        # ------------------------------------------------------------------
+        # ----------------------------------------------------------------------
         # Re-add all the removed constraints
-        # ------------------------------------------------------------------
+        # ----------------------------------------------------------------------
+        self.__cache_add(None, False)
         for cid in removed_constraints:
             self.constraints[cid] = self._add_lpconstraint(cid)
         self.description = self.description | removed_description
@@ -347,7 +395,7 @@ class ModelInterface:
 
     def core_unsat_forall(self: ModelInterface, conflict: int,
                           unprop_cids: dict[int, list[tuple[LpConstraint,
-                                                            tuple[int, ...]]]], lazy: bool = False) \
+                            tuple[int, ...]]]], lazy: bool = False) \
             -> list[int]:
         self.logger.conflicts_forall += 1
         # ----------------------------------------------------------------------
@@ -358,9 +406,9 @@ class ModelInterface:
         # ----------------------------------------------------------------------
         # Add new objective
         # ----------------------------------------------------------------------
-        objective, sense, b = self.constraints_forall[conflict]
+        objective, _, b = self.constraints_forall[conflict]
         self._set_lpobjective(objective)
-        self.description[conflict] = self.description_db[conflict]
+        # self.description[conflict] = self.description_db[conflict]
         # ----------------------------------------------------------------------
         # For each unused constraints group
         # ----------------------------------------------------------------------
@@ -380,15 +428,13 @@ class ModelInterface:
                 # --------------------------------------------------------------
                 # Compute optimum
                 # --------------------------------------------------------------
-                status, optimum = self.__solve()
+                status, optimum = self.__lpsolve()
                 # --------------------------------------------------------------
                 # Split status
                 # --------------------------------------------------------------
                 if status == 'optimal':
                     assert optimum is not None
-                    is_meaningfull = \
-                        (sense == '>=' and optimum >= b - self.epsilon) or \
-                        (sense == '<=' and optimum <= b + self.epsilon)
+                    is_meaningfull = optimum >= b - self.epsilon
                 elif status == 'infeasible':
                     is_meaningfull = True
                 elif status == 'unbounded':
@@ -412,9 +458,14 @@ class ModelInterface:
             # ------------------------------------------------------------------
             if is_meaningfull:
                 optimum_cores.append(up_cid)
+
         # ----------------------------------------------------------------------
         # Remove all added constraints
         # ----------------------------------------------------------------------
+        self.__cache_add(
+            self.description_db[conflict],
+            False
+        )
         for lpconstraint in to_remove_constraints:
             self._remove_lpconstraint(lpconstraint)
             self.description_complement.clear()
@@ -422,7 +473,7 @@ class ModelInterface:
         # Remove current objective
         # ----------------------------------------------------------------------
         self._set_lpobjective(self.default_objective)
-        del self.description[conflict]
+        # del self.description[conflict]
         return optimum_cores
 
     # ==========================================================================
