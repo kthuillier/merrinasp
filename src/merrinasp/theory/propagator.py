@@ -95,7 +95,7 @@ class LpPropagator:
         # ----------------------------------------------------------------------
         lp_checker.propagate(control, changes)
         nogoods: list[list[int]] | None = lp_checker.check()
-        if self.__show_lpassignment and (nogoods is None or len(nogoods) == 0):
+        if self.__show_lpassignment:
             lp_checker.compute_assignment()
         lp_checker.undo(changes)
         # ----------------------------------------------------------------------

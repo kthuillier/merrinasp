@@ -320,7 +320,7 @@ class LpSolver:
 
     def optimize(self: LpSolver) \
             -> dict[str, tuple[str, None | dict[str, float | None]]]:
-        self.assignments = {}
+        self.assignments.clear()
         for pid in self.get_pids(only_completed=True):
             self.assignments[pid] = self.models[pid].optimize()
         return self.assignments
