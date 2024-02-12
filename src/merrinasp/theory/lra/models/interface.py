@@ -373,8 +373,7 @@ class ModelInterface:
             # ------------------------------------------------------------------
             # Check the satisfiability
             # ------------------------------------------------------------------
-            status, _ = self.__lpsolve()
-            issat: bool = status in ('optimal', 'unbounded')
+            issat: bool = self.check_exists()
             if issat:
                 self.__cache_add(None, True)
                 conflicting_cids.append(abs(cid))
@@ -386,7 +385,7 @@ class ModelInterface:
         # ----------------------------------------------------------------------
         # Re-add all the removed constraints
         # ----------------------------------------------------------------------
-        self.__cache_add(None, False)
+        # self.__cache_add(None, False)
         for cid in removed_constraints:
             self.constraints[cid] = self._add_lpconstraint(cid)
         self.description = self.description | removed_description
@@ -426,23 +425,33 @@ class ModelInterface:
                 # Add the constraint
                 # --------------------------------------------------------------
                 self.add(up_cid, up_constraint, up_description)
-                # --------------------------------------------------------------
-                # Compute optimum
-                # --------------------------------------------------------------
-                status, optimum = self.__lpsolve()
-                # --------------------------------------------------------------
-                # Split status
-                # --------------------------------------------------------------
-                if status == 'optimal':
-                    assert optimum is not None
-                    is_meaningfull = optimum >= b - self.epsilon
-                elif status == 'infeasible':
-                    is_meaningfull = True
-                elif status == 'unbounded':
-                    pass
+                cache_check: None | bool = self.__cache_check(
+                    self.description_db[conflict]
+                )
+                if cache_check is None:
+                    # ----------------------------------------------------------
+                    # Compute optimum
+                    # ----------------------------------------------------------
+                    status, optimum = self.__lpsolve()
+                    # ----------------------------------------------------------
+                    # Split status
+                    # ----------------------------------------------------------
+                    if status == 'optimal':
+                        assert optimum is not None
+                        is_meaningfull = optimum >= b - self.epsilon
+                    elif status == 'infeasible':
+                        is_meaningfull = True
+                    elif status == 'unbounded':
+                        pass
+                    else:
+                        print('Error: Unknown LP solver status:', status)
+                        sys.exit(0)
+                    self.__cache_add(
+                        self.description_db[conflict],
+                        is_meaningfull
+                    )
                 else:
-                    print('Error: Unknown LP solver status:', status)
-                    sys.exit(0)
+                    is_meaningfull = cache_check
                 # --------------------------------------------------------------
                 # Stop if the constraint is meaningfull
                 # --------------------------------------------------------------
@@ -463,10 +472,10 @@ class ModelInterface:
         # ----------------------------------------------------------------------
         # Remove all added constraints
         # ----------------------------------------------------------------------
-        self.__cache_add(
-            self.description_db[conflict],
-            False
-        )
+        # self.__cache_add(
+        #     self.description_db[conflict],
+        #     False
+        # )
         for lpconstraint in to_remove_constraints:
             self._remove_lpconstraint(lpconstraint)
             self.description_complement.clear()
