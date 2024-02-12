@@ -57,8 +57,7 @@ from swiglpk import (  # type: ignore
     glp_scale_prob,
     GLP_SF_AUTO
 )
-
-
+from merrinasp.theory.lra.cache import LpCache
 from merrinasp.theory.lra.models.interface import (
     ModelInterface,
     Sense,
@@ -86,9 +85,9 @@ INFINITY: float = 10*9
 class ModelGLPK(ModelInterface):
 
     def __init__(self: ModelGLPK, lpsolver: str, pid: str,
-                 epsilon: float = 10**-6) \
+                 cache: LpCache = LpCache(), epsilon: float = 10**-6) \
             -> None:
-        super().__init__(lpsolver, pid, epsilon=epsilon)
+        super().__init__(lpsolver, pid, epsilon=epsilon, cache=cache)
         # ----------------------------------------------------------------------
         # Problem structure
         # ----------------------------------------------------------------------

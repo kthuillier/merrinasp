@@ -20,6 +20,7 @@ from merrinasp.theory.lra.models.interface import (
     Sense,
     LpStatus
 )
+from merrinasp.theory.lra.cache import LpCache
 
 # ==============================================================================
 # Type Alias
@@ -36,9 +37,9 @@ ForallConstraint = tuple[interface.Objective, Sense, float]
 class ModelOptlang(ModelInterface):
 
     def __init__(self: ModelOptlang, lpsolver: str, pid: str,
-                 epsilon: float = 10**-6) \
+                 cache: LpCache = LpCache(), epsilon: float = 10**-6) \
             -> None:
-        super().__init__(lpsolver, pid, epsilon=epsilon)
+        super().__init__(lpsolver, pid, epsilon=epsilon, cache=cache)
         # ----------------------------------------------------------------------
         # Problem structure
         # ----------------------------------------------------------------------

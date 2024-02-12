@@ -70,7 +70,7 @@ class Logger:
                     logger.cache_missed_sum + logger.cache_prevented_sum
                     for logger in loggers
                 ),
-                'Size': sum(
+                'Size': max(
                     logger.cache_size
                     for logger in loggers
                 )

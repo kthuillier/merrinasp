@@ -12,7 +12,6 @@ import sys
 from merrinasp.theory.language import LpConstraint
 from merrinasp.theory.lra.logger import Logger
 from merrinasp.theory.lra.cache import LpCache
-from merrinasp.theory.lra.better_cache import BetterLpCache
 
 # ==============================================================================
 # Type Alias
@@ -32,7 +31,7 @@ Objective = tuple[list[tuple[float, str]], Sense, float]
 class ModelInterface:
 
     def __init__(self: ModelInterface, lpsolver: str, pid: str,
-                 epsilon: float = 10**-6) \
+                 cache: LpCache = LpCache(), epsilon: float = 10**-6) \
             -> None:
         # ----------------------------------------------------------------------
         # ModelInterface data
@@ -53,10 +52,10 @@ class ModelInterface:
         # ----------------------------------------------------------------------
         # Cache
         # ----------------------------------------------------------------------
-        self.cache: LpCache = LpCache()
-        self.description: dict[int, tuple[int, ...]] = {}
-        self.description_db: dict[int, tuple[int, ...]] = {}
-        self.description_complement: list[tuple[int, ...]] = []
+        self.cache: LpCache = cache
+        self.description: dict[int, tuple[str, str]] = {}
+        self.description_db: dict[int, tuple[str, str]] = {}
+        self.description_complement: list[tuple[str, str]] = []
 
         # ----------------------------------------------------------------------
         # Problem structure
@@ -78,12 +77,12 @@ class ModelInterface:
     def update(self: ModelInterface,
                constraints: list[tuple[int,
                                        LpConstraint,
-                                       tuple[int, ...]]]) -> None:
+                                       tuple[str, str]]]) -> None:
         for cid, constraint, description in constraints:
             self.add(cid, constraint, description)
 
     def add(self: ModelInterface, cid: int, constraint: LpConstraint,
-            description: tuple[int, ...]) -> None:
+            description: tuple[str, str]) -> None:
         dt: float = time()
         constraint_type, expr, sense, b = constraint
         # ----------------------------------------------------------------------
@@ -149,12 +148,12 @@ class ModelInterface:
 # ==========================================================================
     # Cache
     # ==========================================================================
-    def __cache_check(self: ModelInterface, objective: Any) \
+    def __cache_check(self: ModelInterface, objective: str | None) \
             -> None | bool:
         dt: float = time()
         cache_check: None | bool = self.cache.check(
             list(self.description.values()) + self.description_complement,
-            tuple(sorted(objective)) if objective is not None else None
+            objective if objective is not None else None
         )
         if cache_check is not None:
             self.logger.cache_prevented_nb += 1
@@ -164,13 +163,13 @@ class ModelInterface:
         self.logger.cache_missed_sum += time() - dt
         return None
 
-    def __cache_add(self: ModelInterface, objective: Any, issat: bool) -> None:
+    def __cache_add(self: ModelInterface, objective: str | None,
+                    issat: bool) -> None:
         self.cache.add(
             list(self.description.values()) + self.description_complement,
-            tuple(sorted(objective)) if objective is not None else None,
+            objective if objective is not None else None,
             issat
         )
-        self.logger.cache_size = self.cache.get_size()
 
     def __lpsolve(self: ModelInterface) -> tuple[LpStatus, float | None]:
         # ----------------------------------------------------------------------
@@ -230,7 +229,7 @@ class ModelInterface:
         # Check if it is already solved
         # ----------------------------------------------------------------------
         cache_check: None | bool = self.__cache_check(
-            self.description_db[cid]
+            self.description_db[cid][1]
         )
         if cache_check is not None:
             return cache_check
@@ -257,7 +256,7 @@ class ModelInterface:
         else:
             print('Error: Unknown LP solver status:', status)
             sys.exit(0)
-        self.__cache_add(self.description_db[cid], issat)
+        self.__cache_add(self.description_db[cid][1], issat)
         return issat
 
     def check_forall(self: ModelInterface) -> list[int]:
@@ -322,7 +321,9 @@ class ModelInterface:
             self.add(
                 ocid,
                 ('exists', expr, '=', optimum),
-                (ocid,)
+                ('exists', ' + '.join(
+                    f'{coeff} * {var}' for coeff, var in sorted(expr)
+                ) + f' = {optimum}')
             )
             to_remove_constraints.append(ocid)
         # ----------------------------------------------------------------------
@@ -360,7 +361,7 @@ class ModelInterface:
         # ----------------------------------------------------------------------
         conflicting_cids: list[int] = []
         removed_constraints: list[int] = []
-        removed_description: dict[int, tuple[int, ...]] = {}
+        removed_description: dict[int, tuple[str, str]] = {}
         for cid in self.constraints_exists:
             # ------------------------------------------------------------------
             # Remove a constraint
@@ -395,7 +396,7 @@ class ModelInterface:
 
     def core_unsat_forall(self: ModelInterface, conflict: int,
                           unprop_cids: dict[int, list[tuple[LpConstraint,
-                            tuple[int, ...]]]], lazy: bool = False) \
+                            tuple[str, str]]]], lazy: bool = False) \
             -> list[int]:
         self.logger.conflicts_forall += 1
         # ----------------------------------------------------------------------
@@ -463,7 +464,7 @@ class ModelInterface:
         # Remove all added constraints
         # ----------------------------------------------------------------------
         self.__cache_add(
-            self.description_db[conflict],
+            self.description_db[conflict][1],
             False
         )
         for lpconstraint in to_remove_constraints:

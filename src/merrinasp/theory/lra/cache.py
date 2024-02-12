@@ -11,7 +11,7 @@ from typing import Iterable
 # Type Alias
 # ==============================================================================
 
-CONSTRAINT = tuple[int, ...]
+CONSTRAINT = tuple[str, str]
 CFG = set[CONSTRAINT]
 STATUS = tuple[CFG, float]
 
