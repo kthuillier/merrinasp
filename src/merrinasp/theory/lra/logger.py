@@ -21,7 +21,7 @@ class Logger:
         self.cache_prevented_sum: float = 0
         self.cache_missed_nb: int = 0
         self.cache_missed_sum: float = 0
-        self.cache_size: int = 0
+        self.cache_size: list[int] = [0, 0]
         self.conflicts_exists: int = 0
         self.conflicts_forall: int = 0
         self.model_updates_nb: int = 0
@@ -70,10 +70,16 @@ class Logger:
                     logger.cache_missed_sum + logger.cache_prevented_sum
                     for logger in loggers
                 ),
-                'Size': max(
-                    logger.cache_size
-                    for logger in loggers
-                )
+                'Size': {
+                    'Current': max(
+                        logger.cache_size[0]
+                        for logger in loggers
+                    ),
+                    'Maximum': max(
+                        logger.cache_size[1]
+                        for logger in loggers
+                    )
+                }
             }
         }
         return statistics

@@ -54,7 +54,7 @@ class LpSolver:
         self.cids_propagated: dict[int, bool] = {}
         self.cids_constraints: dict[int, ParsedLpConstraint] = {}
         self.cids_grounded_constraints: \
-            dict[int, list[tuple[LpConstraint, tuple[str, str]]]] = {}
+            dict[int, list[tuple[LpConstraint, int]]] = {}
 
         # ----------------------------------------------------------------------
         # Initialize internal memory
@@ -126,7 +126,7 @@ class LpSolver:
                   cids: list[tuple[int, bool, list[int]]]) -> None:
         propagate_constraints: dict[str, list[tuple[int,
                                                     LpConstraint,
-                                                    tuple[str, str]]]] = {}
+                                                    int]]] = {}
         for cid, value, condid in cids:
             # ------------------------------------------------------------------
             # Update 'guess' status
@@ -140,7 +140,7 @@ class LpSolver:
             if value:
                 self.cids_propagated[cid] = True
                 pid, constraint = self.__get_constraints(cid, condid)
-                description: tuple[str, str] = self.__get_description(
+                description: int = self.__get_description(
                     cid,
                     condid
                 )
@@ -225,7 +225,7 @@ class LpSolver:
                     only_propagated=True
                 )
                 unprop_cids: dict[int, list[tuple[LpConstraint,
-                                                  tuple[str, str]]]] = {
+                                                  int]]] = {
                     cid: self.__ground_lpconstraints(cid)
                     for cid in self.get_constraints(pid)
                     if cid not in prop_cids
@@ -256,7 +256,7 @@ class LpSolver:
         return pid, (ctype, expr_, sense, bound)
 
     def __get_description(self: LpSolver, cid: int,
-                          condids: list[int]) -> tuple[str, str]:
+                          condids: list[int]) -> int:
         _, (ctype, expr_, sense, bound) = self.__get_constraints(cid, condids)
         expr_str: str = ' + '.join(
             f'{coeff} * {var}'
@@ -266,7 +266,7 @@ class LpSolver:
             ctype,
             f'{expr_str} {sense} {bound}'
         )
-        return description
+        return hash(description)
 
     def get_pids(self: LpSolver, only_completed: bool = False) -> list[str]:
         def is_completed(pid: str) -> bool:
@@ -304,7 +304,7 @@ class LpSolver:
             for model in self.models.values()
         ]
         for logger in loggers:
-            logger.cache_size = self.__cache.get_size()
+            logger.cache_size[0], logger.cache_size[1] = self.__cache.get_size()
         return loggers
 
     # ==========================================================================
@@ -330,7 +330,7 @@ class LpSolver:
     # ==========================================================================
 
     def __ground_lpconstraints(self: LpSolver, cid: int) \
-            -> list[tuple[LpConstraint, tuple[str, str]]]:
+            -> list[tuple[LpConstraint, int]]:
         # ----------------------------------------------------------------------
         # Recursive function yielding list of list of grounded LpConstraint
         # ----------------------------------------------------------------------
@@ -353,7 +353,7 @@ class LpSolver:
         # Compute the Grounded LpConstraints
         # ----------------------------------------------------------------------
         ctype, _, expr, sense, b = self.cids_constraints[cid]
-        lpconstraints: list[tuple[LpConstraint, tuple[str, str]]] = []
+        lpconstraints: list[tuple[LpConstraint, int]] = []
         for list_grounded_condids in partition(list(expr.keys())):
             for grounded_condids in list_grounded_condids:
                 lpconstraint: LpConstraint = (
@@ -365,7 +365,7 @@ class LpSolver:
                     sense,
                     b,
                 )
-                description: tuple[str, str] = self.__get_description(
+                description: int = self.__get_description(
                     cid,
                     grounded_condids
                 )

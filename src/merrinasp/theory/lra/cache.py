@@ -11,7 +11,7 @@ from typing import Iterable
 # Type Alias
 # ==============================================================================
 
-CONSTRAINT = tuple[str, str]
+CONSTRAINT = int
 CFG = set[CONSTRAINT]
 STATUS = tuple[CFG, float]
 
@@ -25,11 +25,12 @@ class LpCache:
     def __init__(self: LpCache) -> None:
         # ~ Cache size (used for statistics)
         self.__size: int = 0
+        self.__maxsize: int = 0
         # ~ Borders
         self.__exist_sat_border: list[CFG] = []
         self.__exist_unsat_border: list[CFG] = []
-        self.__forall_sat_border: dict[str | None,list[CFG]] = {}
-        self.__forall_unsat_border: dict[str | None,list[CFG]] = {}
+        self.__forall_sat_border: dict[int | None,list[CFG]] = {}
+        self.__forall_unsat_border: dict[int | None,list[CFG]] = {}
 
     def __add_exists_sat(self: LpCache, cfg: CFG) -> None:
         subset_cfgs: list[CFG] = []
@@ -43,6 +44,7 @@ class LpCache:
             self.__exist_sat_border.remove(cfg_)
         self.__exist_sat_border.append(cfg)
         self.__size += 1
+        self.__maxsize = max(self.__maxsize, self.__size)
 
     def __add_exists_unsat(self: LpCache, cfg: CFG) -> None:
         superset_cfgs: list[CFG] = []
@@ -56,8 +58,9 @@ class LpCache:
             self.__exist_unsat_border.remove(cfg_)
         self.__exist_unsat_border.append(cfg)
         self.__size += 1
+        self.__maxsize = max(self.__maxsize, self.__size)
 
-    def __add_forall_sat(self: LpCache, cfg: CFG, objective: str) -> None:
+    def __add_forall_sat(self: LpCache, cfg: CFG, objective: int) -> None:
         if objective not in self.__forall_sat_border:
             self.__forall_sat_border[objective] = [cfg]
             return
@@ -72,8 +75,9 @@ class LpCache:
             self.__forall_sat_border[objective].remove(cfg_)
         self.__forall_sat_border[objective].append(cfg)
         self.__size += 1
+        self.__maxsize = max(self.__maxsize, self.__size)
 
-    def __add_forall_unsat(self: LpCache, cfg: CFG, objective: str) -> None:
+    def __add_forall_unsat(self: LpCache, cfg: CFG, objective: int) -> None:
         if objective not in self.__forall_unsat_border:
             self.__forall_unsat_border[objective] = [cfg]
             return
@@ -88,9 +92,10 @@ class LpCache:
             self.__forall_unsat_border[objective].remove(cfg_)
         self.__forall_unsat_border[objective].append(cfg)
         self.__size += 1
+        self.__maxsize = max(self.__maxsize, self.__size)
 
     def add(self: LpCache, description: Iterable[CONSTRAINT],
-            objective: str | None, issat: bool) -> None:
+            objective: int | None, issat: bool) -> None:
         cfg: CFG = set(description)
         if objective is None:
             if issat:
@@ -115,7 +120,7 @@ class LpCache:
             return False
         return None
 
-    def __check_forall(self: LpCache, cfg: CFG, objective: str) -> None | bool:
+    def __check_forall(self: LpCache, cfg: CFG, objective: int) -> None | bool:
         is_sat: bool = any(
             cfg_.issubset(cfg)
             for cfg_ in self.__forall_sat_border.get(objective, [])
@@ -131,11 +136,11 @@ class LpCache:
         return None
 
     def check(self: LpCache, description: Iterable[CONSTRAINT],
-              objective: str | None) -> None | bool:
+              objective: int | None) -> None | bool:
         cfg: CFG = set(description)
         if objective is None:
             return self.__check_exists(cfg)
         return self.__check_forall(cfg, objective)
 
-    def get_size(self: LpCache) -> int:
-        return self.__size
+    def get_size(self: LpCache) -> tuple[int, int]:
+        return self.__size, self.__maxsize

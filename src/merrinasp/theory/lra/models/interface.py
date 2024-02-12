@@ -53,9 +53,9 @@ class ModelInterface:
         # Cache
         # ----------------------------------------------------------------------
         self.cache: LpCache = cache
-        self.description: dict[int, tuple[str, str]] = {}
-        self.description_db: dict[int, tuple[str, str]] = {}
-        self.description_complement: list[tuple[str, str]] = []
+        self.description: dict[int, int] = {}
+        self.description_db: dict[int, int] = {}
+        self.description_complement: list[int] = []
 
         # ----------------------------------------------------------------------
         # Problem structure
@@ -77,12 +77,12 @@ class ModelInterface:
     def update(self: ModelInterface,
                constraints: list[tuple[int,
                                        LpConstraint,
-                                       tuple[str, str]]]) -> None:
+                                       int]]) -> None:
         for cid, constraint, description in constraints:
             self.add(cid, constraint, description)
 
     def add(self: ModelInterface, cid: int, constraint: LpConstraint,
-            description: tuple[str, str]) -> None:
+            description: int) -> None:
         dt: float = time()
         constraint_type, expr, sense, b = constraint
         # ----------------------------------------------------------------------
@@ -148,7 +148,7 @@ class ModelInterface:
 # ==========================================================================
     # Cache
     # ==========================================================================
-    def __cache_check(self: ModelInterface, objective: str | None) \
+    def __cache_check(self: ModelInterface, objective: int | None) \
             -> None | bool:
         dt: float = time()
         cache_check: None | bool = self.cache.check(
@@ -163,7 +163,7 @@ class ModelInterface:
         self.logger.cache_missed_sum += time() - dt
         return None
 
-    def __cache_add(self: ModelInterface, objective: str | None,
+    def __cache_add(self: ModelInterface, objective: int | None,
                     issat: bool) -> None:
         self.cache.add(
             list(self.description.values()) + self.description_complement,
@@ -229,7 +229,7 @@ class ModelInterface:
         # Check if it is already solved
         # ----------------------------------------------------------------------
         cache_check: None | bool = self.__cache_check(
-            self.description_db[cid][1]
+            self.description_db[cid]
         )
         if cache_check is not None:
             return cache_check
@@ -256,7 +256,7 @@ class ModelInterface:
         else:
             print('Error: Unknown LP solver status:', status)
             sys.exit(0)
-        self.__cache_add(self.description_db[cid][1], issat)
+        self.__cache_add(self.description_db[cid], issat)
         return issat
 
     def check_forall(self: ModelInterface) -> list[int]:
@@ -321,9 +321,9 @@ class ModelInterface:
             self.add(
                 ocid,
                 ('exists', expr, '=', optimum),
-                ('exists', ' + '.join(
+                hash(('exists', ' + '.join(
                     f'{coeff} * {var}' for coeff, var in sorted(expr)
-                ) + f' = {optimum}')
+                ) + f' = {optimum}'))
             )
             to_remove_constraints.append(ocid)
         # ----------------------------------------------------------------------
@@ -361,7 +361,7 @@ class ModelInterface:
         # ----------------------------------------------------------------------
         conflicting_cids: list[int] = []
         removed_constraints: list[int] = []
-        removed_description: dict[int, tuple[str, str]] = {}
+        removed_description: dict[int, int] = {}
         for cid in self.constraints_exists:
             # ------------------------------------------------------------------
             # Remove a constraint
@@ -396,7 +396,7 @@ class ModelInterface:
 
     def core_unsat_forall(self: ModelInterface, conflict: int,
                           unprop_cids: dict[int, list[tuple[LpConstraint,
-                            tuple[str, str]]]], lazy: bool = False) \
+                            int]]], lazy: bool = False) \
             -> list[int]:
         self.logger.conflicts_forall += 1
         # ----------------------------------------------------------------------
@@ -464,7 +464,7 @@ class ModelInterface:
         # Remove all added constraints
         # ----------------------------------------------------------------------
         self.__cache_add(
-            self.description_db[conflict][1],
+            self.description_db[conflict],
             False
         )
         for lpconstraint in to_remove_constraints:
