@@ -17,6 +17,8 @@ from merrinasp.theory.lra.cache import LpCache
 # Type Alias
 # ==============================================================================
 
+Id = int
+Description = int
 Sense = Literal['>=', '<=', '=']
 LpStatus = Literal['optimal', 'unbounded', 'infeasible', 'undefined']
 ExistsConstraint = tuple[Any, Sense, float]
@@ -71,6 +73,11 @@ class ModelInterface:
         self.variables: dict[str, Any]
         self.constraints: dict[int, Any]
 
+        # ----------------------------------------------------------------------
+        # Debug
+        # ----------------------------------------------------------------------
+        self.added_order: list[set[int]] = []
+
     # ==========================================================================
     # Builder
     # ==========================================================================
@@ -78,8 +85,10 @@ class ModelInterface:
                constraints: list[tuple[int,
                                        LpConstraint,
                                        int]]) -> None:
+        self.added_order.append(set())
         for cid, constraint, description in constraints:
             self.add(cid, constraint, description)
+            self.added_order[-1].add(cid)
 
     def add(self: ModelInterface, cid: int, constraint: LpConstraint,
             description: int) -> None:
@@ -142,10 +151,18 @@ class ModelInterface:
                 del self.objectives[cid]
             else:
                 assert False
+            empty_set: None | int = None
+            for i, batch in enumerate(self.added_order):
+                if cid in batch:
+                    batch.remove(cid)
+                    if len(batch) == 0:
+                        empty_set = i
+            if empty_set is not None:
+                del self.added_order[empty_set]
             self.logger.model_backtracks_nb += 1
             self.logger.model_backtracks_sum += time() - dt
 
-# ==========================================================================
+    # ==========================================================================
     # Cache
     # ==========================================================================
     def __cache_check(self: ModelInterface, objective: int | None) \
@@ -362,26 +379,35 @@ class ModelInterface:
         conflicting_cids: list[int] = []
         removed_constraints: list[int] = []
         removed_description: dict[int, int] = {}
-        for cid in self.constraints_exists:
-            # ------------------------------------------------------------------
-            # Remove a constraint
-            # ------------------------------------------------------------------
-            self._remove_lpconstraint(self.constraints[cid])
-            removed_description[cid] = self.description[cid]
-            del self.constraints[cid]
-            del self.description[cid]
+        for batch in self.added_order:
+            for cid in batch:
+                if cid not in self.constraints_exists:
+                    continue
+                # --------------------------------------------------------------
+                # Remove a constraint
+                # --------------------------------------------------------------
+                self._remove_lpconstraint(self.constraints[cid])
+                removed_description[cid] = self.description[cid]
+                del self.constraints[cid]
+                del self.description[cid]
             # ------------------------------------------------------------------
             # Check the satisfiability
             # ------------------------------------------------------------------
             issat: bool = self.check_exists()
             if issat:
                 self.__cache_add(None, True)
-                conflicting_cids.append(abs(cid))
-                self.constraints[cid] = self._add_lpconstraint(cid)
-                self.description[cid] = removed_description[cid]
-                del removed_description[cid]
+                for cid in batch:
+                    if cid not in self.constraints_exists:
+                        continue
+                    conflicting_cids.append(abs(cid))
+                    self.constraints[cid] = self._add_lpconstraint(cid)
+                    self.description[cid] = removed_description[cid]
+                    del removed_description[cid]
             else:
-                removed_constraints.append(cid)
+                for cid in batch:
+                    if cid not in self.constraints_exists:
+                        continue
+                    removed_constraints.append(cid)
         # ----------------------------------------------------------------------
         # Re-add all the removed constraints
         # ----------------------------------------------------------------------

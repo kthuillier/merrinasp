@@ -24,10 +24,18 @@ from merrinasp.theory.language import (
 )
 from merrinasp.theory.lra.cache import LpCache
 
+
+# ==============================================================================
+# Type Alias
+# ==============================================================================
+
+PID = str
+SID = int
+DESCRIPTION = int
+
 # ==============================================================================
 # Solver
 # ==============================================================================
-
 
 class LpSolver:
 
@@ -78,26 +86,15 @@ class LpSolver:
             self.lpsolver_interface = ModelPuLP
         elif self.lpsolver == 'glpk':
             self.lpsolver_interface = ModelGLPK
-        elif self.lpsolver == 'glpk-optlang':
-            self.lpsolver = 'glpk'
-            from merrinasp.theory.lra.models.model_optlang import ModelOptlang
-            self.lpsolver_interface = ModelOptlang
-        elif self.lpsolver == 'cplex-pulp':
-            self.lpsolver = 'cplex'
-            self.lpsolver_interface = ModelPuLP
-        elif self.lpsolver == 'cplex-optlang':
-            self.lpsolver = 'cplex'
-            from merrinasp.theory.lra.models.model_optlang import ModelOptlang
-            self.lpsolver_interface = ModelOptlang
         elif self.lpsolver == 'gurobi':
             self.lpsolver_interface = ModelGurobiPy
-        elif self.lpsolver == 'gurobi-pulp':
-            self.lpsolver = 'gurobi'
-            self.lpsolver_interface = ModelPuLP
-        elif self.lpsolver == 'gurobi-optlang':
-            self.lpsolver = 'gurobi'
+        elif '-optlang' in self.lpsolver:
+            self.lpsolver = self.lpsolver.removesuffix('-optlang')
             from merrinasp.theory.lra.models.model_optlang import ModelOptlang
             self.lpsolver_interface = ModelOptlang
+        elif '-pulp' in self.lpsolver:
+            self.lpsolver = self.lpsolver.removesuffix('-pulp')
+            self.lpsolver_interface = ModelPuLP
         else:
             print(f'Warning: unknown LP solver {self.lpsolver}.')
             print('Set to default value "cbc".')
