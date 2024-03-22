@@ -5,13 +5,14 @@
 # ==============================================================================
 
 from __future__ import annotations
-from typing import Literal
+from typing import Iterable, Literal
 from time import time
 
 from clingo import (
     Assignment,
     PropagateInit,
     PropagateControl,
+    SymbolicAtom,
 )
 
 from merrinasp.theory.lra.logger import Logger
@@ -40,11 +41,16 @@ class LpPropagator:
         # Constraints to add
         # ----------------------------------------------------------------------
         self.__waiting_nogoods: list[list[int]] = []
+        # ----------------------------------------------------------------------
+        # Atoms map
+        # ----------------------------------------------------------------------
+        self.__initprop: PropagateInit | None = None
 
     # --------------------------------------------------------------------------
     # Clingo's propagator override functions
     # --------------------------------------------------------------------------
     def init(self: LpPropagator, init: PropagateInit) -> None:
+        self.__initprop = init
         for _ in range(init.number_of_threads):
             optChecker: LpChecker = LpChecker(
                 init,
@@ -68,7 +74,7 @@ class LpPropagator:
         # ----------------------------------------------------------------------
         # Add waiting nogoods
         # ----------------------------------------------------------------------
-        if not self.apply_nogoods(control):
+        if not self.__apply_nogoods(control):
             return
         nogoods: list[list[int]] | None = lp_checker.check()
         # ----------------------------------------------------------------------
@@ -76,14 +82,14 @@ class LpPropagator:
         # ----------------------------------------------------------------------
         if nogoods is not None and len(nogoods) != 0:
             self.__waiting_nogoods.extend(nogoods)
-            if not self.apply_nogoods(control):
+            if not self.__apply_nogoods(control):
                 return
 
     def check(self: LpPropagator, control: PropagateControl) -> None:
         # ----------------------------------------------------------------------
         # Apply waiting nogoods
         # ----------------------------------------------------------------------
-        if not self.apply_nogoods(control):
+        if not self.__apply_nogoods(control):
             return
         # ----------------------------------------------------------------------
         # Compute changes
@@ -103,18 +109,29 @@ class LpPropagator:
         # ----------------------------------------------------------------------
         if nogoods is not None and len(nogoods) != 0:
             self.__waiting_nogoods.extend(nogoods)
-            if not self.apply_nogoods(control):
+            if not self.__apply_nogoods(control):
                 return
 
     # --------------------------------------------------------------------------
     # Model refiners
     # --------------------------------------------------------------------------
-    def apply_nogoods(self: LpPropagator, control: PropagateControl) -> bool:
+    def __apply_nogoods(self: LpPropagator, control: PropagateControl) -> bool:
         while len(self.__waiting_nogoods) != 0:
             nogood: list[int] = self.__waiting_nogoods.pop()
             if not control.add_nogood(nogood, lock=True):
                 return False
         return True
+
+    def add_constraint(self: LpPropagator, clause: Iterable[SymbolicAtom]) \
+            -> None:
+        assert self.__initprop is not None
+        clause_sid: list[int] = [
+            self.__initprop.solver_literal(
+                self.__initprop.symbolic_atoms[atom].literal  # type: ignore
+            )
+            for atom in clause
+        ]
+        self.__waiting_nogoods.append(clause_sid)
 
     # --------------------------------------------------------------------------
     # Getters

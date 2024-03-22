@@ -74,11 +74,11 @@ class Logger:
                     'Current': max(
                         logger.cache_size[0]
                         for logger in loggers
-                    ),
+                    ) if len(loggers) != 0 else 0,
                     'Maximum': max(
                         logger.cache_size[1]
                         for logger in loggers
-                    )
+                    ) if len(loggers) != 0 else 0
                 }
             }
         }
