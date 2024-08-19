@@ -20,20 +20,16 @@ from merrinasp.theory.language import THEORY_LANGUAGE, rewrite
 from merrinasp.theory.propagator import LpPropagator
 from merrinasp.theory.lra.models import AVAILABLE_LPSOLVERS
 
+
+
 # ==============================================================================
 # Application class
 # ==============================================================================
-
-# ==============================================================================
-# Application class
-# ==============================================================================
-
-
 class Application:
 
     def __init__(self: Application):
         self.program_name: str = 'merrinasp'
-        self.version: str = '1.0.0'
+        self.version: str = '1.1.0'
         self.propagator: LpPropagator | None = None
         self.lpsolver: str = 'cbc'
         self.lp_epsilon: float = 10**-3
@@ -109,27 +105,27 @@ class Application:
         assert self.propagator is not None
         print(' '.join(
             f'{s}' for s in model.symbols(shown=True)
-        ))
+        ), flush=True)
         if self.show_lpassignments_flag.flag:
             assignments = self.propagator.get_assignment(model.thread_id)
             assert assignments is not None
-            print('LP Assignment:')
+            print('LP Assignment:', flush=True)
             if 'pid(default)' in assignments:
                 status, assignment = assignments['pid(default)']
-                print(f'Default: {status}')
+                print(f'Default: {status}', flush=True)
                 if assignment is not None:
                     print(' '.join(
                         f'{var}={value}' for var, value in assignment.items()
-                    ))
+                    ), flush=True)
             for pid in sorted(assignments.keys()):
                 if pid == 'pid(default)':
                     continue
                 status, assignment = assignments[pid]
-                print(f'{pid}: {status}')
+                print(f'{pid}: {status}', flush=True)
                 if assignment is not None:
                     print(' '.join(
                         f'{var}={value}' for var, value in assignment.items()
-                    ))
+                    ), flush=True)
 
     def __on_statistics(self: Application, _: StatisticsMap,
                         acc: StatisticsMap) -> None:
