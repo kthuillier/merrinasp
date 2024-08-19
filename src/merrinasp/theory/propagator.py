@@ -11,8 +11,7 @@ from time import time
 from clingo import (
     Assignment,
     PropagateInit,
-    PropagateControl,
-    SymbolicAtom,
+    PropagateControl
 )
 
 from merrinasp.theory.lra.logger import Logger
@@ -44,13 +43,12 @@ class LpPropagator:
         # ----------------------------------------------------------------------
         # Atoms map
         # ----------------------------------------------------------------------
-        self.__initprop: PropagateInit | None = None
+        self.__symbolic_atoms: dict[str, int] = {}
 
     # --------------------------------------------------------------------------
     # Clingo's propagator override functions
     # --------------------------------------------------------------------------
     def init(self: LpPropagator, init: PropagateInit) -> None:
-        self.__initprop = init
         for _ in range(init.number_of_threads):
             optChecker: LpChecker = LpChecker(
                 init,
@@ -122,15 +120,13 @@ class LpPropagator:
                 return False
         return True
 
-    def add_constraint(self: LpPropagator, clause: Iterable[SymbolicAtom]) \
-            -> None:
-        assert self.__initprop is not None
-        clause_sid: list[int] = [
-            self.__initprop.solver_literal(
-                self.__initprop.symbolic_atoms[atom].literal  # type: ignore
-            )
-            for atom in clause
-        ]
+    def add_constraint(self: LpPropagator,
+                       clause: Iterable[tuple[str, bool]]) -> None:
+        clause_sid: list[int] = []
+        for atom_str, value in clause:
+            assert atom_str in self.__symbolic_atoms
+            literal: int = self.__symbolic_atoms[atom_str]
+            clause_sid.append(literal if value else -literal)
         self.__waiting_nogoods.append(clause_sid)
 
     # --------------------------------------------------------------------------
