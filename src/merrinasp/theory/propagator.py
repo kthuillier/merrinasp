@@ -49,6 +49,18 @@ class LpPropagator:
     # Clingo's propagator override functions
     # --------------------------------------------------------------------------
     def init(self: LpPropagator, init: PropagateInit) -> None:
+        # ----------------------------------------------------------------------
+        # Init symbolic atomics mapping
+        # ----------------------------------------------------------------------
+        self.__symbolic_atoms.clear()
+        for atom in init.symbolic_atoms:
+            atom_str: str = str(atom.symbol)
+            literal: int = atom.literal
+            self.__symbolic_atoms[atom_str] = literal
+        # ----------------------------------------------------------------------
+        # Init LP checkers
+        # ----------------------------------------------------------------------
+        self.__checkers.clear()
         for _ in range(init.number_of_threads):
             optChecker: LpChecker = LpChecker(
                 init,
