@@ -31,7 +31,7 @@ class Application:
         self.program_name: str = 'merrinasp'
         self.version: str = '1.1.0'
         self.propagator: LpPropagator | None = None
-        self.lpsolver: str = 'cbc'
+        self.lpsolver: str = 'glpk'
         self.lp_epsilon: float = 10**-3
         self.show_lpassignments_flag: Flag = Flag(False)
         self.continous_assignment: dict[str, float] | None = None
@@ -47,7 +47,7 @@ class Application:
         group: str = 'MerrinASP Options'
         options.add(group, "lp-solver",
                     "Set LP solver\n" +
-                    f"   <arg>: {{ {', '.join(AVAILABLE_LPSOLVERS)} }} (default lp-solver=cbc)",
+                    f"   <arg>: {{ {', '.join(AVAILABLE_LPSOLVERS)} }} (default lp-solver=glpk)",
                     self.parse_lp_solver_option)
 
         options.add_flag(group, "show-lp-assignment",

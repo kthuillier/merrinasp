@@ -57,7 +57,7 @@ usage: merrinasp [number] [options] [files]
 
 Options:
   --lp-solver=<arg>: Set LP solver
-   <arg>: { gurobi, cbc, glpk, cplex-optlang, cplex-pulp } (default lp-solver=cbc)
+   <arg>: { gurobi, cbc, glpk, cplex-optlang, cplex-pulp } (default lp-solver=glpk)
   --[no-]show-lp-assignment: Show LP solution and the LP solver status for each partition of linear constraints
   --[no-]lazy-mode: Check the satisfiability of linear constraints at the end of the resolution process
   --[no-]strict-forall: Force the linear domains of forall constraints to be satisfiable

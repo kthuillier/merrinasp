@@ -40,7 +40,7 @@ DESCRIPTION = int
 class LpSolver:
 
     def __init__(self: LpSolver, init: PropagateInit,
-                 lpsolver: str = 'cbc', strict_forall: bool = True) -> None:
+                 lpsolver: str = 'glpk', strict_forall: bool = True) -> None:
         self.preprocessing_time: float = time()
         # ----------------------------------------------------------------------
         # Select LpSolver
@@ -85,7 +85,7 @@ class LpSolver:
                         strict_forall: bool) -> None:
         self.strict_forall: bool = strict_forall
         self.lpsolver: str = lpsolver
-        self.lpsolver_interface: type[ModelInterface] = ModelPuLP
+        self.lpsolver_interface: type[ModelInterface] = ModelGLPK
         if self.lpsolver == 'cbc':
             self.lpsolver_interface = ModelPuLP
         elif self.lpsolver == 'glpk':
@@ -101,7 +101,7 @@ class LpSolver:
             self.lpsolver_interface = ModelPuLP
         else:
             print(f'Warning: unknown LP solver {self.lpsolver}.')
-            print('Set to default value "cbc".')
+            print('Set to default value "glpk".')
 
     def __init_memory(self: LpSolver, init: PropagateInit) -> None:
         for atom in init.theory_atoms:

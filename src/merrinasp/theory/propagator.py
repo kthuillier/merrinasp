@@ -24,7 +24,7 @@ from merrinasp.theory.lra.solver import LpSolver
 
 class LpPropagator:
 
-    def __init__(self: LpPropagator, lpsolver: str = 'cbc') -> None:
+    def __init__(self: LpPropagator, lpsolver: str = 'glpk') -> None:
         # ----------------------------------------------------------------------
         # Parameters
         # ----------------------------------------------------------------------
@@ -186,7 +186,8 @@ class LpPropagator:
 class LpChecker:
 
     def __init__(self: LpChecker, init: PropagateInit, lazy: bool = False,
-                 lpsolver: str = 'cbc', is_strict_forall: bool = False) -> None:
+                 lpsolver: str = 'glpk',
+                 is_strict_forall: bool = False) -> None:
         self.preprocessing_time: float = time()
         # ----------------------------------------------------------------------
         # Linear problem solvers
