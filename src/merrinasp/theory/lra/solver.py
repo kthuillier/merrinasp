@@ -64,6 +64,9 @@ class LpSolver:
         self.cids_grounded_constraints: \
             dict[int, list[tuple[LpConstraint, int]]] = {}
 
+        self.pids_checked_exists: dict[str, bool] = {}
+        self.pids_checked_forall: dict[str, bool] = {}
+
         # ----------------------------------------------------------------------
         # Initialize internal memory
         # ----------------------------------------------------------------------
@@ -74,6 +77,7 @@ class LpSolver:
         # ----------------------------------------------------------------------
         self.assignments: dict[str,
                                tuple[str, None | dict[str, float | None]]] = {}
+        self.statistics: dict[str, Logger] = {}
 
         self.preprocessing_time = time() - self.preprocessing_time
 
@@ -166,7 +170,12 @@ class LpSolver:
                 self.models[pid] = self.lpsolver_interface(
                     self.lpsolver, pid, cache=self.__cache
                 )
+                if pid in self.statistics:
+                    self.models[pid].logger = self.statistics[pid]
+                    del self.statistics[pid]
             self.models[pid].update(constraints)
+            self.pids_checked_exists[pid] = False
+            self.pids_checked_forall[pid] = False
 
     def undo(self: LpSolver, cids: list[int]) -> None:
         undo_constraints: dict[str, list[int]] = {}
@@ -192,7 +201,10 @@ class LpSolver:
         # ----------------------------------------------------------------------
         for pid, constraints in undo_constraints.items():
             self.models[pid].remove(constraints)
+            self.pids_checked_exists[pid] = False
+            self.pids_checked_forall[pid] = False
             if self.models[pid].is_empty():
+                self.statistics[pid] = self.models[pid].logger
                 del self.models[pid]
 
     # ==========================================================================
@@ -202,7 +214,10 @@ class LpSolver:
     def check_exists(self: LpSolver) -> list[list[int]]:
         core_conflicts: list[list[int]] = []
         for pid in self.get_pids(only_completed=True):
+            if self.pids_checked_exists[pid]:
+                continue
             sat: bool = self.models[pid].check_exists()
+            self.pids_checked_exists[pid] = True
             if not sat:
                 conflict: list[int] = self.models[pid].core_unsat_exists()
                 if self.strict_forall:
@@ -215,7 +230,10 @@ class LpSolver:
         for pid in self.get_pids(only_completed=True):
             if pid not in self.models_forall:
                 continue
+            if self.pids_checked_forall[pid]:
+                continue
             unsat_cid: list[int] = self.models[pid].check_forall()
+            self.pids_checked_forall[pid] = True
             if len(unsat_cid) > 0:
                 prop_cids: list[int] = self.get_constraints(
                     pid,
