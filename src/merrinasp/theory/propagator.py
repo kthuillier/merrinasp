@@ -55,8 +55,8 @@ class LpPropagator:
         self.__symbolic_atoms.clear()
         for atom in init.symbolic_atoms:
             atom_str: str = str(atom.symbol)
-            literal: int = atom.literal
-            self.__symbolic_atoms[atom_str] = literal
+            sid: int = init.solver_literal(atom.literal)
+            self.__symbolic_atoms[atom_str] = sid
         # ----------------------------------------------------------------------
         # Init LP checkers
         # ----------------------------------------------------------------------
@@ -132,13 +132,13 @@ class LpPropagator:
                 return False
         return True
 
-    def add_constraint(self: LpPropagator,
-                       clause: Iterable[tuple[str, bool]]) -> None:
+    def add_clause(self: LpPropagator,
+                   clause: Iterable[tuple[str, bool]]) -> None:
         clause_sid: list[int] = []
         for atom_str, value in clause:
             assert atom_str in self.__symbolic_atoms
             literal: int = self.__symbolic_atoms[atom_str]
-            clause_sid.append(literal if value else -literal)
+            clause_sid.append(-literal if value else literal)
         self.__waiting_nogoods.append(clause_sid)
 
     # --------------------------------------------------------------------------
@@ -190,11 +190,10 @@ class LpPropagator:
     def strict_forall_check(self: LpPropagator, is_strict: bool) -> None:
         self.__isstrictforall = is_strict
 
+
 # ==============================================================================
 # Checker
 # ==============================================================================
-
-
 class LpChecker:
 
     def __init__(self: LpChecker, init: PropagateInit, lazy: bool = False,
