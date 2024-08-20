@@ -91,3 +91,8 @@ Some test examples are provided in the folder `./examples`:
     ```sh
     merrinasp -n 0 --project --opt-strategy=usc --heuristic=Domain -c bounded_nonreach=0 --enum-mode=domRec --dom-mod=5,16 --opt-mode=optN  examples/merrin/model_merrin.lp examples/merrin/model_rfba_assert.lp examples/merrin/data/data_covert_kfp_100.lp
     ```
+
+## References
+
+To cite this tool:
+> Kerian Thuillier, Anne Siegel, and Loïc Paulevé (2024). CEGAR-Based Approach for Solving Combinatorial Optimization Modulo Quantified Linear Arithmetics Problems.  Proceedings of the AAAI Conference on Artificial Intelligence, 38(8), 8146-8153. [https://doi.org/10.1609/aaai.v38i8.28654](https://doi.org/10.1609/aaai.v38i8.28654) \[[pdf](https://hal.science/hal-04420454/document)\]
