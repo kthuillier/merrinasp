@@ -16,8 +16,7 @@ requires-python = ">=3.7"
 dependencies = [
     "clingo >=5.6.1",
     "cplex >=22.1.1.0",
-    "gurobipy >= 10.0.3",
-    "gurobipy-stubs >= 2.0.0",
+    "gurobipy",
     "optlang >= 1.8.1",
     "pulp >= 2.7.0"
 ]
