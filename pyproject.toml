@@ -17,7 +17,6 @@ dependencies = [
     "clingo >=5.6.1",
     "cplex >=22.1.1.0",
     "gurobipy",
-    "gurobipy-stubs",
     "optlang >= 1.8.1",
     "pulp >= 2.7.0"
 ]
