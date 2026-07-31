@@ -17,8 +17,6 @@ from merrinasp.theory.lra.cache import LpCache
 # Type Alias
 # ==============================================================================
 
-Id = int
-Description = int
 Sense = Literal['>=', '<=', '=']
 LpStatus = Literal['optimal', 'unbounded', 'infeasible', 'undefined']
 ExistsConstraint = tuple[Any, Sense, float]
@@ -132,7 +130,6 @@ class ModelInterface:
                 '>=',
                 b
             )
-        self.logger.model_updates_nb += 1
         self.logger.model_updates_sum += time() - dt
 
     def remove(self: ModelInterface, cids: list[int]) -> None:
@@ -159,7 +156,6 @@ class ModelInterface:
                         empty_set = i
             if empty_set is not None:
                 del self.added_order[empty_set]
-            self.logger.model_backtracks_nb += 1
             self.logger.model_backtracks_sum += time() - dt
 
     # ==========================================================================
@@ -367,15 +363,7 @@ class ModelInterface:
     # ==========================================================================
     # Core conflicts
     # ==========================================================================
-    def core_unsat_exists(self: ModelInterface, lazy: bool = False) -> list[int]:
-        # ----------------------------------------------------------------------
-        # If Lazy: do not compute the unsatisfiable core
-        # ----------------------------------------------------------------------
-        if lazy:
-            return list(self.constraints.keys())
-        # ----------------------------------------------------------------------
-        # Else: compute the unsatisfiable core
-        # ----------------------------------------------------------------------
+    def core_unsat_exists(self: ModelInterface) -> list[int]:
         conflicting_cids: list[int] = []
         removed_constraints: list[int] = []
         removed_description: dict[int, int] = {}
@@ -421,14 +409,9 @@ class ModelInterface:
 
     def core_unsat_forall(self: ModelInterface, conflict: int,
                           unprop_cids: dict[int, list[tuple[LpConstraint,
-                            int]]], lazy: bool = False) \
+                            int]]]) \
             -> list[int]:
         self.logger.conflicts_forall += 1
-        # ----------------------------------------------------------------------
-        # If Lazy: do not compute the optimum core
-        # ----------------------------------------------------------------------
-        if lazy:
-            return list(unprop_cids.keys())
         # ----------------------------------------------------------------------
         # Add new objective
         # ----------------------------------------------------------------------

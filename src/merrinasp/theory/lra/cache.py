@@ -13,7 +13,6 @@ from typing import Iterable
 
 CONSTRAINT = int
 CFG = set[CONSTRAINT]
-STATUS = tuple[CFG, float]
 
 # ==============================================================================
 # Lp Cache

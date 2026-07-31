@@ -14,7 +14,7 @@ from __future__ import annotations
 class Logger:
 
     def __init__(self: Logger, pid: str) -> None:
-        self.id: str = pid
+        self.pid: str = pid
         self.lpsolver_calls_nb: int = 0
         self.lpsolver_calls_sum: float = 0
         self.cache_prevented_nb: int = 0
@@ -24,9 +24,7 @@ class Logger:
         self.cache_size: list[int] = [0, 0]
         self.conflicts_exists: int = 0
         self.conflicts_forall: int = 0
-        self.model_updates_nb: int = 0
         self.model_updates_sum: float = 0
-        self.model_backtracks_nb: int = 0
         self.model_backtracks_sum: float = 0
 
     @classmethod

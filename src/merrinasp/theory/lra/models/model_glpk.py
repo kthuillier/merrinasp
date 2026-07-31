@@ -5,64 +5,57 @@
 # ==============================================================================
 
 from __future__ import annotations
+
 from typing import Any
 
 from swiglpk import (  # type: ignore
-    glp_get_col_prim,
     GLP_CV,
     GLP_FEAS,
+    GLP_FR,
+    GLP_FX,
     GLP_INFEAS,
-    GLP_NOFEAS,
-    GLP_OPT,
-    GLP_UNBND,
-    glp_set_col_kind,
-    glp_find_row,
-    glp_get_obj_val,
-    glp_set_obj_dir,
-    glp_init_smcp,
+    GLP_LO,
     GLP_MIN,
-    glp_smcp,
+    GLP_NOFEAS,
     GLP_OFF,
-    glp_term_out,
+    GLP_OPT,
+    GLP_SF_AUTO,
+    GLP_UNBND,
+    GLP_UP,
+    doubleArray,
+    glp_add_cols,
+    glp_add_rows,
+    glp_adv_basis,
     glp_create_index,
     glp_create_prob,
-    glp_get_num_rows,
-    glp_get_num_cols,
-    glp_get_col_name,
-    glp_set_prob_name,
-    glp_set_obj_coef,
-    glp_simplex,
-    glp_get_status,
-    glp_add_cols,
-    glp_set_col_name,
-    intArray,
-    glp_add_rows,
-    glp_set_row_name,
-    doubleArray,
-    glp_set_mat_row,
-    glp_set_col_bnds,
-    glp_set_row_bnds,
-    GLP_FR,
-    GLP_UP,
-    GLP_LO,
-    GLP_FX,
     glp_del_rows,
-    glp_get_mat_row,
-    glp_get_row_ub,
-    glp_get_row_type,
-    glp_get_row_lb,
-    glp_get_row_name,
+    glp_find_row,
+    glp_get_col_name,
+    glp_get_col_prim,
+    glp_get_num_cols,
+    glp_get_num_rows,
     glp_get_obj_coef,
-    glp_adv_basis,
+    glp_get_obj_val,
+    glp_get_status,
+    glp_init_smcp,
     glp_scale_prob,
-    GLP_SF_AUTO
+    glp_set_col_bnds,
+    glp_set_col_kind,
+    glp_set_col_name,
+    glp_set_mat_row,
+    glp_set_obj_coef,
+    glp_set_obj_dir,
+    glp_set_prob_name,
+    glp_set_row_bnds,
+    glp_set_row_name,
+    glp_simplex,
+    glp_smcp,
+    glp_term_out,
+    intArray,
 )
+
 from merrinasp.theory.lra.cache import LpCache
-from merrinasp.theory.lra.models.interface import (
-    ModelInterface,
-    Sense,
-    LpStatus
-)
+from merrinasp.theory.lra.models.interface import LpStatus, ModelInterface, Sense
 
 # ==============================================================================
 # Type Alias
@@ -173,17 +166,6 @@ class ModelGLPK(ModelInterface):
 
         return consname
 
-    # def _remove_lpconstraint(self: ModelGLPK, constraint: str) -> None:
-    #     index: int = glp_find_row(self.model, constraint)
-    #     if index == 0:
-    #         return
-    #     last_index: int = glp_get_num_rows(self.model)
-    #     self.__switch_rows(index, last_index)
-    #     num = intArray(2)
-    #     num[1] = last_index
-    #     glp_del_rows(self.model, 1, num)
-    #     self.__clear_unused_lpvariable()
-
     def _remove_lpconstraint(self: ModelGLPK, constraint: str) -> None:
         index: int = glp_find_row(self.model, constraint)
         if index == 0:
@@ -232,39 +214,3 @@ class ModelGLPK(ModelInterface):
         elif glpk_status == GLP_UNBND:
             status = 'unbounded'
         return status
-
-    def __switch_rows(self: ModelGLPK, i: int, j: int) -> None:
-        if i == j:
-            return
-        #  ----------------------------------------------------------------------
-        #  Switch names
-        #  ----------------------------------------------------------------------
-        i_name: str = glp_get_row_name(self.model, i)
-        j_name: str = glp_get_row_name(self.model, j)
-        glp_set_row_name(self.model, i, j_name)
-        glp_set_row_name(self.model, j, i_name)
-        #  ----------------------------------------------------------------------
-        # Switch bounds
-        #  ----------------------------------------------------------------------
-        i_type: Any = glp_get_row_type(self.model, i)
-        i_lb: float = glp_get_row_lb(self.model, i)
-        i_ub: float = glp_get_row_ub(self.model, i)
-        j_type: Any = glp_get_row_type(self.model, j)
-        j_lb: float = glp_get_row_lb(self.model, j)
-        j_ub: float = glp_get_row_ub(self.model, j)
-        glp_set_row_bnds(self.model, i, j_type, j_lb, j_ub)
-        glp_set_row_bnds(self.model, j, i_type, i_lb, i_ub)
-        # ----------------------------------------------------------------------
-        # Switch coefficients
-        # ----------------------------------------------------------------------
-        num_cols: int = glp_get_num_cols(self.model)
-        i_index_array: intArray = intArray(num_cols + 1)
-        j_index_array: intArray = intArray(num_cols + 1)
-        i_value_array: doubleArray = doubleArray(num_cols + 1)
-        j_value_array: doubleArray = doubleArray(num_cols + 1)
-        i_num: int = \
-            glp_get_mat_row(self.model, i, i_index_array, i_value_array)
-        j_num: int = \
-            glp_get_mat_row(self.model, j, j_index_array, j_value_array)
-        glp_set_mat_row(self.model, i, j_num, j_index_array, j_value_array)
-        glp_set_mat_row(self.model, j, i_num, i_index_array, i_value_array)

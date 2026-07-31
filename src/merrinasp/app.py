@@ -34,7 +34,6 @@ class Application:
         self.lpsolver: str = 'glpk'
         self.lp_epsilon: float = 10**-6
         self.show_lpassignments_flag: Flag = Flag(False)
-        self.continous_assignment: dict[str, float] | None = None
         self.lazy_mode: Flag = Flag(False)
         self.strict_forall: Flag = Flag(False)
 
