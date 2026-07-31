@@ -32,6 +32,7 @@ class LpPropagator:
         self.__isstrictforall: bool = False
         self.__show_lpassignment: bool = False
         self.__lpsolver: str = lpsolver
+        self.__strict_epsilon: float = 10**-6
         # ----------------------------------------------------------------------
         # Checkers
         # ----------------------------------------------------------------------
@@ -66,7 +67,8 @@ class LpPropagator:
                 init,
                 lazy=self.__islazy,
                 lpsolver=self.__lpsolver,
-                is_strict_forall=self.__isstrictforall
+                is_strict_forall=self.__isstrictforall,
+                strict_epsilon=self.__strict_epsilon
             )
             self.__checkers.append(optChecker)
 
@@ -190,6 +192,9 @@ class LpPropagator:
     def strict_forall_check(self: LpPropagator, is_strict: bool) -> None:
         self.__isstrictforall = is_strict
 
+    def strict_epsilon(self: LpPropagator, epsilon: float) -> None:
+        self.__strict_epsilon = epsilon
+
 
 # ==============================================================================
 # Checker
@@ -198,13 +203,15 @@ class LpChecker:
 
     def __init__(self: LpChecker, init: PropagateInit, lazy: bool = False,
                  lpsolver: str = 'glpk',
-                 is_strict_forall: bool = False) -> None:
+                 is_strict_forall: bool = False,
+                 strict_epsilon: float = 10**-3) -> None:
         self.preprocessing_time: float = time()
         # ----------------------------------------------------------------------
         # Linear problem solvers
         # ----------------------------------------------------------------------
         self.lpsolver: LpSolver = LpSolver(
-            init, lpsolver, strict_forall=is_strict_forall
+            init, lpsolver, strict_forall=is_strict_forall,
+            strict_epsilon=strict_epsilon
         )
         # ----------------------------------------------------------------------
         # Database - Clingo Literals IDs

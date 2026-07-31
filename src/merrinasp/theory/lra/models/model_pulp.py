@@ -135,9 +135,14 @@ class ModelPuLP(ModelInterface):
         self.__clear_unused_lpvariable()
 
     def _lpsolve(self: ModelPuLP) -> tuple[LpStatus, float | None]:
+        # PuLP's GUROBI interface caches its gurobipy.Model across solves and
+        # never drops removed constraints, so rebuild it fresh each call.
+        interface: LpSolver = self.interface
+        if self.lpsolver.lower() == 'gurobi':
+            interface = GUROBI(msg=False, warmStart=True, DualReductions=0)
         status: LpStatus = \
             PulpStatus[self.model.solve(
-                self.interface)].lower()  # type: ignore
+                interface)].lower()  # type: ignore
         if status == 'optimal' and self.model.objective is not None:
             return status, value(self.model.objective)  # type: ignore
         return status, None
@@ -157,13 +162,11 @@ class ModelPuLP(ModelInterface):
         def __get_used_lpvariable() -> set[str]:
             used_vars: set[str] = set()
             for constraint in self.model.constraints.values():
-                expression = constraint.toDict()['coefficients']
-                for var in expression:
-                    used_vars.add(var['name'])
+                for var in constraint.keys():
+                    used_vars.add(var.name)
             if self.model.objective is not None:
-                expression = self.model.objective.toDict()  # type: ignore
-                for var in expression:
-                    used_vars.add(var['name'])
+                for var in self.model.objective.keys():  # type: ignore
+                    used_vars.add(var.name)
             return used_vars
         used_vars: set[str] = __get_used_lpvariable()
         # ----------------------------------------------------------------------

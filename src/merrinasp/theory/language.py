@@ -143,7 +143,8 @@ def rewrite(ctrl: Control, files: list[str]) -> None:
 # ------------------------------------------------------------------------------
 
 
-def parse_atom(atom: TheoryAtom) -> list[ParsedLpConstraint]:
+def parse_atom(atom: TheoryAtom,
+               strict_epsilon: float = 10**-3) -> list[ParsedLpConstraint]:
     atom_op: LpOperator = atom.term.name  # type: ignore
     if atom_op == 'dom':
         return parse_lpdomain(atom)
@@ -152,7 +153,7 @@ def parse_atom(atom: TheoryAtom) -> list[ParsedLpConstraint]:
     if atom_op == 'sum':
         return parse_constraint(atom)
     if atom_op == 'assert':
-        return parse_assert(atom)
+        return parse_assert(atom, strict_epsilon)
     print('Error: Unknown theory atom:', atom)
     sys.exit(0)
 
@@ -210,7 +211,7 @@ def parse_objective(atom: TheoryAtom) -> list[ParsedLpConstraint]:
     else:
         print('Error: unknown theory atom:', atom)
         sys.exit(0)
-    weight: int = atom.guard[1].number  # type: ignore
+    weight: int = int(parse_numeric(atom.guard[1]))
     # --------------------------------------------------------------------------
     # Parse expression
     # --------------------------------------------------------------------------
@@ -239,13 +240,14 @@ def parse_constraint(atom: TheoryAtom) -> list[ParsedLpConstraint]:
     return [('exists', pid, affine_expr, op, bound)]
 
 
-def parse_assert(atom: TheoryAtom) -> list[ParsedLpConstraint]:
+def parse_assert(atom: TheoryAtom,
+                 strict_epsilon: float = 10**-3) -> list[ParsedLpConstraint]:
     # --------------------------------------------------------------------------
     # Parse bound
     # --------------------------------------------------------------------------
     guard: tuple[str, TheoryTerm] | None = atom.guard
     assert guard is not None
-    op: Literal['=', '<=', '>='] = guard[0]  # type: ignore
+    op: Literal['=', '<=', '>=', '<', '>'] = guard[0]  # type: ignore
     bound: float = parse_numeric(guard[1])
     # --------------------------------------------------------------------------
     # Parse expression
@@ -257,9 +259,18 @@ def parse_assert(atom: TheoryAtom) -> list[ParsedLpConstraint]:
     # --------------------------------------------------------------------------
     # Build constraints
     # --------------------------------------------------------------------------
+    # Strict inequalities are not natively supported by the LP solvers, so
+    # they are approximated by shifting the bound by `strict_epsilon`, a
+    # margin strictly larger than the solvers' internal feasibility
+    # tolerance (see ModelInterface.epsilon), so the shift is not silently
+    # absorbed by that tolerance.
     if op == '=':
         return [('forall', pid, affine_expr, '<=', bound),
                 ('forall', pid, affine_expr, '>=', bound)]
+    if op == '<':
+        return [('forall', pid, affine_expr, '<=', bound - strict_epsilon)]
+    if op == '>':
+        return [('forall', pid, affine_expr, '>=', bound + strict_epsilon)]
     return [('forall', pid, affine_expr, op, bound)]
 
 

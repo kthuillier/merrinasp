@@ -40,12 +40,14 @@ DESCRIPTION = int
 class LpSolver:
 
     def __init__(self: LpSolver, init: PropagateInit,
-                 lpsolver: str = 'glpk', strict_forall: bool = True) -> None:
+                 lpsolver: str = 'glpk', strict_forall: bool = True,
+                 strict_epsilon: float = 10**-3) -> None:
         self.preprocessing_time: float = time()
         # ----------------------------------------------------------------------
         # Select LpSolver
         # ----------------------------------------------------------------------
         self.__init_lpsolver(lpsolver, strict_forall)
+        self.__strict_epsilon: float = strict_epsilon
         self.__cache: LpCache = LpCache()
 
         # ----------------------------------------------------------------------
@@ -110,7 +112,9 @@ class LpSolver:
             self.pids.setdefault(pid, []).append(cid)
             self.cids_guessed[cid] = False
             self.cids_propagated[cid] = False
-            constraints: list[ParsedLpConstraint] = parse_atom(atom)
+            constraints: list[ParsedLpConstraint] = parse_atom(
+                atom, self.__strict_epsilon
+            )
             assert 1 <= len(constraints) and len(constraints) <= 2
             self.cids_constraints[cid] = constraints[0]
             if constraints[0][0] == 'forall':

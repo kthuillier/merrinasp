@@ -5,6 +5,7 @@
 # ==============================================================================
 
 from __future__ import annotations
+
 import sys
 
 from clingo import (
@@ -17,9 +18,8 @@ from clingo import (
 )
 
 from merrinasp.theory.language import THEORY_LANGUAGE, rewrite
-from merrinasp.theory.propagator import LpPropagator
 from merrinasp.theory.lra.models import AVAILABLE_LPSOLVERS
-
+from merrinasp.theory.propagator import LpPropagator
 
 
 # ==============================================================================
@@ -32,7 +32,7 @@ class Application:
         self.version: str = '1.1.0'
         self.propagator: LpPropagator | None = None
         self.lpsolver: str = 'glpk'
-        self.lp_epsilon: float = 10**-3
+        self.lp_epsilon: float = 10**-6
         self.show_lpassignments_flag: Flag = Flag(False)
         self.continous_assignment: dict[str, float] | None = None
         self.lazy_mode: Flag = Flag(False)
@@ -62,11 +62,24 @@ class Application:
                          "Force the linear domains of forall constraints to be satisfiable",
                          self.strict_forall)
 
+        options.add(group, "lp-eps",
+                    "Set the margin used to approximate strict inequalities "
+                    "(<, >) in &assert constraints\n" +
+                    f"   <arg>: <float> (default lpeps={self.lp_epsilon})",
+                    self.parse_lp_epsilon_option)
+
     def parse_lp_solver_option(self: Application, s: str) -> bool:
         if s in AVAILABLE_LPSOLVERS:
             self.lpsolver = s  # type: ignore
             return True
         return False
+
+    def parse_lp_epsilon_option(self: Application, s: str) -> bool:
+        try:
+            self.lp_epsilon = float(s)
+        except ValueError:
+            return False
+        return True
 
     def validate_options(self: Application) -> bool:
         return True
@@ -81,6 +94,7 @@ class Application:
         self.propagator.lazy(self.lazy_mode.flag)
         self.propagator.show_lpassignment(self.show_lpassignments_flag.flag)
         self.propagator.strict_forall_check(not self.strict_forall.flag)
+        self.propagator.strict_epsilon(self.lp_epsilon)
         control.register_propagator(self.propagator)  # type: ignore
 
         if not files:
