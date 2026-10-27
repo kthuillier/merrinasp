@@ -65,6 +65,16 @@ class ModelInterface:
         self.objectives: dict[int, Objective] = {}
 
         # ----------------------------------------------------------------------
+        # Conflict certificates
+        # ----------------------------------------------------------------------
+        # Infeasible core (constraint ids) read from the solver after the last
+        # infeasible solve, if the backend provides one. Reset on any change.
+        self._unsat_core: list[int] | None = None
+        # Counterexample points of violated forall constraints, found by the
+        # last `check_forall` call.
+        self._counterexamples: dict[int, dict[str, float]] = {}
+
+        # ----------------------------------------------------------------------
         # Model data
         # ----------------------------------------------------------------------
         self.default_objective: Any
@@ -91,6 +101,7 @@ class ModelInterface:
     def add(self: ModelInterface, cid: int, constraint: LpConstraint,
             description: int) -> None:
         dt: float = time()
+        self._unsat_core = None
         constraint_type, expr, sense, b = constraint
         # ----------------------------------------------------------------------
         # Instanciate new variables
@@ -133,6 +144,7 @@ class ModelInterface:
         self.logger.model_updates_sum += time() - dt
 
     def remove(self: ModelInterface, cids: list[int]) -> None:
+        self._unsat_core = None
         for cid in cids:
             dt: float = time()
             if cid in self.constraints:
@@ -184,6 +196,21 @@ class ModelInterface:
             issat
         )
 
+    def __known_infeasible(self: ModelInterface) -> bool:
+        # Cache lookup without touching the cache statistics
+        return self.cache.check(
+            list(self.description.values()) + self.description_complement,
+            None
+        ) is False
+
+    def __get_point(self: ModelInterface) -> dict[str, float]:
+        point: dict[str, float] = {}
+        for var in self.variables:
+            value: float | None = self._get_lpvalue(var)
+            # A variable without value does not occur in the solved problem
+            point[var] = 0. if value is None else value
+        return point
+
     def __lpsolve(self: ModelInterface) -> tuple[LpStatus, float | None]:
         # ----------------------------------------------------------------------
         # SOLVER: solve the problem
@@ -194,6 +221,7 @@ class ModelInterface:
         # 'unbounded': 'The objective can be optimized infinitely.'
         # 'undefined': 'The solver determined that the problem is ill-formed.'
         dt = time()
+        self._unsat_core = None
         status, optimum = self._lpsolve()
         self.logger.lpsolver_calls_nb += 1
         self.logger.lpsolver_calls_sum += time() - dt
@@ -220,24 +248,27 @@ class ModelInterface:
         self.__cache_add(None, issat)
         return issat
 
-    def __solve_objective(self:ModelInterface, objective: Any) \
-            -> tuple[LpStatus, float | None]:
-        # ----------------------------------------------------------------------
-        # Add new objective
-        # ----------------------------------------------------------------------
-        self._set_lpobjective(objective)
-        # ----------------------------------------------------------------------
-        # Compute optimum
-        # ----------------------------------------------------------------------
-        status, optimum = self.__lpsolve()
-        # ----------------------------------------------------------------------
-        # Remove current objective
-        # ----------------------------------------------------------------------
-        self._set_lpobjective(self.default_objective)
-        return status, optimum
+    def __solve_forall(self: ModelInterface, cid: int) \
+            -> tuple[LpStatus, float | None, dict[str, float] | None]:
+        """Minimise the forall expression over the current domain.
 
-    def __valid_forall(self:ModelInterface, cid: int) \
-            -> bool:
+        Returns the status, the optimum, and a counterexample point if the
+        forall constraint is violated at an optimal vertex."""
+        objective, sense, b = self.constraints_forall[cid]
+        assert sense == '>='
+        self._set_lpobjective(objective)
+        status, optimum = self.__lpsolve()
+        point: dict[str, float] | None = None
+        if status == 'optimal':
+            assert optimum is not None
+            if optimum < b - self.epsilon:
+                point = self.__get_point()
+        self._set_lpobjective(self.default_objective)
+        return status, optimum, point
+
+    def __valid_forall(self: ModelInterface, cid: int) \
+            -> tuple[bool, bool]:
+        """Return (forall holds, the domain is known to be infeasible)."""
         # ----------------------------------------------------------------------
         # Check if it is already solved
         # ----------------------------------------------------------------------
@@ -245,20 +276,18 @@ class ModelInterface:
             self.description_db[cid]
         )
         if cache_check is not None:
-            return cache_check
+            return cache_check, False
         # ----------------------------------------------------------------------
         # Solve
         # ----------------------------------------------------------------------
-        objective, sense, b = self.constraints_forall[cid]
-        assert sense == '>='
-        status, optimum = self.__solve_objective(objective)
+        status, optimum, point = self.__solve_forall(cid)
         # ----------------------------------------------------------------------
         # Split the different cases and update Cache
         # ----------------------------------------------------------------------
         issat: bool
         if status == 'optimal':
             assert optimum is not None
-            issat = optimum >= b - self.epsilon
+            issat = point is None
             self.__cache_add(None, True)
         elif status == 'infeasible':
             issat = True
@@ -270,12 +299,23 @@ class ModelInterface:
             print('Error: Unknown LP solver status:', status)
             sys.exit(0)
         self.__cache_add(self.description_db[cid], issat)
-        return issat
+        if point is not None:
+            self._counterexamples[cid] = point
+        return issat, status == 'infeasible'
 
     def check_forall(self: ModelInterface) -> list[int]:
+        self._counterexamples.clear()
+        # ----------------------------------------------------------------------
+        # An infeasible domain makes every forall constraint hold
+        # ----------------------------------------------------------------------
+        if self.__known_infeasible():
+            return []
         conflicts: list[int] = []
         for cid in self.constraints_forall:
-            if not self.__valid_forall(cid):
+            issat, infeasible = self.__valid_forall(cid)
+            if infeasible:
+                return []
+            if not issat:
                 conflicts.append(cid)
         return conflicts
 
@@ -364,6 +404,36 @@ class ModelInterface:
     # Core conflicts
     # ==========================================================================
     def core_unsat_exists(self: ModelInterface) -> list[int]:
+        self.logger.conflicts_exists += 1
+        # ----------------------------------------------------------------------
+        # Use the solver infeasibility certificate (Farkas proof) if available:
+        # its support is an infeasible subset of the constraints.
+        # ----------------------------------------------------------------------
+        core: list[int] | None = self.__certificate_core()
+        if core is None:
+            return self.__core_unsat_exists_deletion()
+        # ~ The core is infeasible on its own: remember it in the cache
+        self.cache.add([self.description[cid] for cid in core], None, False)
+        return sorted({abs(cid) for cid in core})
+
+    def __certificate_core(self: ModelInterface) -> list[int] | None:
+        core: list[int] | None = self._unsat_core
+        if core is None:
+            # ~ The certificate is unknown (e.g. infeasibility came from the
+            # cache): solve the feasibility problem once to get it.
+            self._set_lpobjective(self.default_objective)
+            status, _ = self.__lpsolve()
+            if status != 'infeasible':
+                return None
+            core = self._unsat_core
+        if not core or any(cid not in self.constraints for cid in core):
+            return None
+        return core
+
+    def __core_unsat_exists_deletion(self: ModelInterface) -> list[int]:
+        # ----------------------------------------------------------------------
+        # Fallback: deletion filter over the batches of added constraints
+        # ----------------------------------------------------------------------
         conflicting_cids: list[int] = []
         removed_constraints: list[int] = []
         removed_description: dict[int, int] = {}
@@ -403,8 +473,6 @@ class ModelInterface:
         for cid in removed_constraints:
             self.constraints[cid] = self._add_lpconstraint(cid)
         self.description = self.description | removed_description
-
-        self.logger.conflicts_exists += 1
         return conflicting_cids
 
     def core_unsat_forall(self: ModelInterface, conflict: int,
@@ -412,6 +480,51 @@ class ModelInterface:
                             int]]]) \
             -> list[int]:
         self.logger.conflicts_forall += 1
+        # ----------------------------------------------------------------------
+        # Counterexample point x of the violated forall constraint: adding
+        # constraints satisfied by x keeps x feasible, hence the forall
+        # constraint stays violated. Only the unpropagated constraints that x
+        # violates (for at least one grounding) can repair the conflict.
+        # ----------------------------------------------------------------------
+        point: dict[str, float] | None = self._counterexamples.pop(
+            conflict, None
+        )
+        if point is None:
+            _, _, point = self.__solve_forall(conflict)
+        if point is None:
+            return self.__core_unsat_forall_greedy(conflict, unprop_cids)
+        return [
+            up_cid
+            for up_cid, up_constraints in unprop_cids.items()
+            if not all(
+                self.__satisfied(up_constraint, point)
+                for up_constraint, _ in up_constraints
+            )
+        ]
+
+    @staticmethod
+    def __satisfied(constraint: LpConstraint, point: dict[str, float]) \
+            -> bool:
+        _, expr, sense, b = constraint
+        # ~ Variables unknown to the model are free: set them to 0
+        value: float = sum(coeff * point.get(var, 0.) for coeff, var in expr)
+        # ~ Tight tolerance: a doubtful constraint is counted as violated, which
+        # only makes the nogood weaker, never unsound
+        tolerance: float = 1e-9 * (1. + abs(b))
+        if sense == '>=':
+            return value >= b - tolerance
+        if sense == '<=':
+            return value <= b + tolerance
+        return abs(value - b) <= tolerance
+
+    def __core_unsat_forall_greedy(
+            self: ModelInterface, conflict: int,
+            unprop_cids: dict[int, list[tuple[LpConstraint, int]]]) \
+            -> list[int]:
+        # ----------------------------------------------------------------------
+        # Fallback (no counterexample point, e.g. unbounded): greedily test
+        # each unpropagated constraint with the LP solver
+        # ----------------------------------------------------------------------
         # ----------------------------------------------------------------------
         # Add new objective
         # ----------------------------------------------------------------------

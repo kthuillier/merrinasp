@@ -9,7 +9,9 @@ from __future__ import annotations
 from typing import Any
 
 from swiglpk import (  # type: ignore
+    GLP_BS,
     GLP_CV,
+    GLP_DUAL,
     GLP_FEAS,
     GLP_FR,
     GLP_FX,
@@ -19,6 +21,7 @@ from swiglpk import (  # type: ignore
     GLP_NOFEAS,
     GLP_OFF,
     GLP_OPT,
+    GLP_PRIMAL,
     GLP_SF_AUTO,
     GLP_UNBND,
     GLP_UP,
@@ -26,9 +29,11 @@ from swiglpk import (  # type: ignore
     glp_add_cols,
     glp_add_rows,
     glp_adv_basis,
+    glp_bf_exists,
     glp_create_index,
     glp_create_prob,
     glp_del_rows,
+    glp_eval_tab_row,
     glp_find_row,
     glp_get_col_name,
     glp_get_col_prim,
@@ -36,7 +41,10 @@ from swiglpk import (  # type: ignore
     glp_get_num_rows,
     glp_get_obj_coef,
     glp_get_obj_val,
+    glp_get_row_name,
+    glp_get_row_stat,
     glp_get_status,
+    glp_get_unbnd_ray,
     glp_init_smcp,
     glp_scale_prob,
     glp_set_col_bnds,
@@ -89,6 +97,7 @@ class ModelGLPK(ModelInterface):
             self._get_lpobjective()
         self.variables: dict[str, int] = {}
         self.constraints: dict[int, str] = {}
+        self.__zero_objective: bool = True
 
     # ==========================================================================
     # Methods dedicated to the GUROBI solver
@@ -132,6 +141,7 @@ class ModelGLPK(ModelInterface):
             assert varname in self.variables
             varindex: int = self.variables[varname]
             glp_set_obj_coef(self.model, varindex, float(coeff))
+        self.__zero_objective = all(coeff == 0 for coeff, _ in objective)
         self.__clear_unused_lpvariable()
 
     def _get_lpexpression(self: ModelGLPK,
@@ -183,6 +193,8 @@ class ModelGLPK(ModelInterface):
             status = self.__lpsolve_glpk()
         if status == 'optimal':
             return status, glp_get_obj_val(self.model)
+        if status == 'infeasible' and self.__zero_objective:
+            self._unsat_core = self.__infeasibility_core()
         return status, None
 
     def _get_lpvalue(self: ModelGLPK, varname: str) -> float | None:
@@ -203,7 +215,36 @@ class ModelGLPK(ModelInterface):
         for varindex in self.variables.values():
             glp_set_obj_coef(self.model, varindex, 0.)
 
+    def __infeasibility_core(self: ModelGLPK) -> list[int] | None:
+        # ----------------------------------------------------------------------
+        # After the dual simplex proves primal infeasibility, the leaving basic
+        # variable k cannot reach its bounds. Its tableau row expresses it with
+        # the non-basic variables: k and the rows of this tableau row form an
+        # infeasible subsystem (support of a Farkas certificate).
+        # ----------------------------------------------------------------------
+        if glp_get_status(self.model) != GLP_NOFEAS \
+                or not glp_bf_exists(self.model):
+            return None
+        k: int = glp_get_unbnd_ray(self.model)
+        m: int = glp_get_num_rows(self.model)
+        # ~ Columns are free, so the leaving variable must be a row
+        if not 1 <= k <= m or glp_get_row_stat(self.model, k) != GLP_BS:
+            return None
+        n: int = glp_get_num_cols(self.model)
+        ind: intArray = intArray(m + n + 1)
+        val: doubleArray = doubleArray(m + n + 1)
+        length: int = glp_eval_tab_row(self.model, k, ind, val)
+        rows: list[int] = [k] + [
+            ind[i] for i in range(1, length + 1)
+            if ind[i] <= m and val[i] != 0
+        ]
+        # ~ Rows are named `cons_<cid>`
+        return [int(glp_get_row_name(self.model, row)[5:]) for row in rows]
+
     def __lpsolve_glpk(self: ModelGLPK) -> LpStatus:
+        # ~ With a zero objective every basis is dual feasible: the dual simplex
+        # warm-starts after added rows and yields infeasibility certificates
+        self.__smcp.meth = GLP_DUAL if self.__zero_objective else GLP_PRIMAL
         glp_simplex(self.model, self.__smcp)
         glpk_status: int = glp_get_status(self.model)
         status: LpStatus = 'undefined'

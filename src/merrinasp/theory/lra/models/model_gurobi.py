@@ -63,6 +63,8 @@ class ModelGurobiPy(ModelInterface):
         model.setParam(GRB.Param.OutputFlag, 0)
         model.setParam(GRB.Param.LogToConsole, 0)
         model.setParam(GRB.Param.DualReductions, 0)
+        # ~ Provide a Farkas certificate (FarkasDual) for infeasible models
+        model.setParam(GRB.Param.InfUnbdInfo, 1)
         return model
 
     def _add_lpvariable(self: ModelGurobiPy, varname: str) -> Var:
@@ -118,10 +120,38 @@ class ModelGurobiPy(ModelInterface):
         if status_id == GRB.OPTIMAL:
             return 'optimal', self.model.ObjVal
         if status_id == GRB.UNBOUNDED:
-            status = 'unbounded'
+            # ~ Gurobi's UNBOUNDED only proves an unbounded ray, not that the
+            # model is feasible: check feasibility with a zero objective
+            status = 'unbounded' if self.__is_feasible() else 'infeasible'
         elif status_id == GRB.INFEASIBLE:
             status = 'infeasible'
+            self._unsat_core = self.__infeasibility_core()
         return status, None
+
+    def __is_feasible(self: ModelGurobiPy) -> bool:
+        objective: LinExpr = self.model.getObjective()  # type: ignore
+        self.model.setObjective(LinExpr(), sense=GRB.MINIMIZE)
+        self.model.optimize()
+        self.logger.lpsolver_calls_nb += 1
+        feasible: bool = self.model.Status != GRB.INFEASIBLE
+        if not feasible:
+            self._unsat_core = self.__infeasibility_core()
+        self.model.setObjective(objective, sense=GRB.MINIMIZE)
+        return feasible
+
+    def __infeasibility_core(self: ModelGurobiPy) -> list[int] | None:
+        # ~ The support of the Farkas dual is an infeasible subsystem
+        cids: list[int] = list(self.constraints.keys())
+        if len(cids) == 0:
+            return None
+        try:
+            farkas: list[float] = self.model.getAttr(
+                GRB.Attr.FarkasDual,
+                [self.constraints[cid] for cid in cids]
+            )
+        except Exception:  # pylint: disable=broad-except
+            return None
+        return [cid for cid, y in zip(cids, farkas) if abs(y) > 1e-9]
 
     def _get_lpvalue(self: ModelGurobiPy, varname: str) -> float | None:
         assert varname in self.variables

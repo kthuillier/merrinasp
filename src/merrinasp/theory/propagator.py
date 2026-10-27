@@ -324,19 +324,22 @@ class LpChecker:
         nogoods: list[list[int]] = []
         nogood: list[int]
         # ----------------------------------------------------------------------
+        # Check and Generalize Forall conflicts
+        # ----------------------------------------------------------------------
+        # Forall constraints are checked first: their LP solve also decides
+        # the feasibility of the domain and stores it in the cache, so the
+        # exists check below does not need another LP call.
+        forall_conflicts: list[tuple[int, list[int], list[int]]] = \
+            self.lpsolver.check_forall()
+        for cid, p_cids, up_cids in forall_conflicts:
+            nogood = self.__nogoods_forall(cid, p_cids, up_cids)
+            nogoods.append(nogood)
+        # ----------------------------------------------------------------------
         # Check and Generalize Exists conflicts
         # ----------------------------------------------------------------------
         exists_conflicts: list[list[int]] = self.lpsolver.check_exists()
         for conflict in exists_conflicts:
             nogood = self.__nogoods_exists(conflict)
-            nogoods.append(nogood)
-        # ----------------------------------------------------------------------
-        # Check and Generalize Forall conflicts
-        # ----------------------------------------------------------------------
-        forall_conflicts: list[tuple[int, list[int], list[int]]] = \
-            self.lpsolver.check_forall()
-        for cid, p_cids, up_cids in forall_conflicts:
-            nogood = self.__nogoods_forall(cid, p_cids, up_cids)
             nogoods.append(nogood)
         return nogoods
 
